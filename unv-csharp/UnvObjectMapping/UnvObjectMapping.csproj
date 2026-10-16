@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    UNV (Universe Design Tool) universe nesne eşleme uygulaması.
+
+    Neden bu ayarlar:
+    - net48 + x86: BO .NET SDK (CrystalDecisions.*) sadece GAC_32'de, yani süreç 32-bit olmalı.
+    - Designer (win64_x64\designer.exe) ayrı süreçte çalışan 64-bit bir COM sunucusu; ona
+      tip kütüphanesiyle değil geç bağlama (dynamic / IDispatch) ile erişiyoruz. Bu yüzden
+      Interop.Designer referansı YOK.
+    - CrystalDecisions referansları: Embed Interop Types = False, Copy Local = False
+      (çalışma anında her zaman BO kurulumunun GAC'taki sürümü kullanılır).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <Platforms>x86</Platforms>
+    <RootNamespace>UnvObjectMapping</RootNamespace>
+    <AssemblyName>UnvObjectMapping</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- .NET Framework kendi kütüphaneleri -->
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Data" />
+
+    <!-- BO 4.3 .NET SDK (GAC_32) -->
+    <Reference Include="CrystalDecisions.Enterprise.Framework, Version=14.0.4000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=x86">
+      <HintPath>C:\Windows\Microsoft.NET\assembly\GAC_32\CrystalDecisions.Enterprise.Framework\v4.0_14.0.4000.0__692fbea5521e1304\CrystalDecisions.Enterprise.Framework.dll</HintPath>
+      <Private>False</Private>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="CrystalDecisions.Enterprise.InfoStore, Version=14.0.4000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=x86">
+      <HintPath>C:\Windows\Microsoft.NET\assembly\GAC_32\CrystalDecisions.Enterprise.InfoStore\v4.0_14.0.4000.0__692fbea5521e1304\CrystalDecisions.Enterprise.InfoStore.dll</HintPath>
+      <Private>False</Private>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+</Project>

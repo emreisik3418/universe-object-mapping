@@ -1,0 +1,23 @@
+# Hassas / ortama özel
+credentials.json
+**/config/credentials.json
+unv-csharp/UnvObjectMapping/Sbox/HsmServiceProxy.cs
+
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+
+# IntelliJ / Java
+.idea/
+out/
+*.iml
+
+# Çalışma klasörleri
+work/
+logs/
+retrieve/
+*.log
+*.glf
