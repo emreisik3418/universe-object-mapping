@@ -3,6 +3,7 @@ using System.Linq;
 using UnvObjectMapping.Config;
 using UnvObjectMapping.Credentials;
 using UnvObjectMapping.Model;
+using UnvObjectMapping.Output;
 using UnvObjectMapping.Sdk;
 
 namespace UnvObjectMapping
@@ -14,7 +15,11 @@ namespace UnvObjectMapping
             "  UnvObjectMapping envcheck\n" +
             "  UnvObjectMapping sbox <credentials.json>\n" +
             "  UnvObjectMapping logon <credentials.json>\n" +
-            "  UnvObjectMapping read <credentials.json> [universe adında geçen metin]";
+            "  UnvObjectMapping read <credentials.json> [universe adında geçen metin]\n" +
+            "  UnvObjectMapping dbtest <credentials.json> [universe adında geçen metin]\n" +
+            "  UnvObjectMapping dbreport <credentials.json>";
+
+        private const string TestSystem = "DBTEST_UNV";
 
         private const string AuthType = "secEnterprise";
 
@@ -34,6 +39,10 @@ namespace UnvObjectMapping
                         return LogonCheck(Need(args, 1, "credentials.json yolu"));
                     case "read":
                         return ReadCheck(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
+                    case "dbtest":
+                        return DbTest(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
+                    case "dbreport":
+                        return DbReport(Need(args, 1, "credentials.json yolu"));
                     default:
                         Console.WriteLine(Usage);
                         return 2;
@@ -132,6 +141,63 @@ namespace UnvObjectMapping
 
             int left = System.Diagnostics.Process.GetProcessesByName("designer").Length;
             Console.WriteLine((left == 0 ? "[OK]   " : "[UYARI] ") + "Kalan designer.exe: " + left);
+            return 0;
+        }
+
+        /// <summary>
+        /// Tek bir UNV okur ve SYSTEM='DBTEST_UNV' olarak yazar, sayar, sonra kendi satırlarını siler.
+        /// Gerçek veriye dokunmaz.
+        /// </summary>
+        private static int DbTest(string configPath, string filter)
+        {
+            var config = AppConfig.Load(configPath);
+            var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
+            BoEnvironment env = config.Environments[0];
+            Credential credential = sbox.Get(env.Sbox);
+
+            UniverseInfo target;
+            using (var session = BoSession.Logon(env.Cms, credential, AuthType))
+            {
+                target = UnvCatalog.ListUnv(session.InfoStore).FirstOrDefault(u =>
+                    filter == null || u.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            if (target == null)
+            {
+                Console.WriteLine("[HATA] Eşleşen UNV bulunamadı.");
+                return 1;
+            }
+
+            var data = new System.Collections.Generic.Dictionary<UniverseInfo, System.Collections.Generic.List<UniverseObject>>();
+            using (var designer = DesignerHost.Start())
+            {
+                designer.Logon(credential, env.Cms, AuthType);
+                data[target] = designer.Read(target);
+            }
+            Console.WriteLine("[OK]   Okundu: " + target + " -> " + data[target].Count + " nesne");
+
+            var writer = new OracleMetadataWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
+            int inserted = writer.ReplaceSystem(TestSystem, DateTime.Now, data, new string[0]);
+            Console.WriteLine("[OK]   Eklenen satır: " + inserted);
+            Console.WriteLine("[OK]   Tablodaki " + TestSystem + " satırı: " + writer.CountUnvRows(TestSystem));
+
+            writer.ReplaceSystem(TestSystem, DateTime.Now,
+                new System.Collections.Generic.Dictionary<UniverseInfo, System.Collections.Generic.List<UniverseObject>>(),
+                new string[0]);
+            Console.WriteLine("[OK]   Temizlendi. Kalan " + TestSystem + " satırı: " + writer.CountUnvRows(TestSystem));
+            return 0;
+        }
+
+        /// <summary>Tablonun SYSTEM / UNX-UNV / zaman bazında özeti (salt okuma).</summary>
+        private static int DbReport(string configPath)
+        {
+            var config = AppConfig.Load(configPath);
+            var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
+            var writer = new OracleMetadataWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
+
+            Console.WriteLine(string.Format("{0,-30} {1,-4} {2,-17} {3,10} {4,10}", "SYSTEM", "TUR", "ZAMAN", "SATIR", "UNIVERSE"));
+            Console.WriteLine(new string('-', 75));
+            foreach (var r in writer.Report())
+                Console.WriteLine(string.Format("{0,-30} {1,-4} {2,-17} {3,10} {4,10}", r[0], r[1], r[2], r[3], r[4]));
             return 0;
         }
 

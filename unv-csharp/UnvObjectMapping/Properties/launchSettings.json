@@ -15,6 +15,14 @@
     "read": {
       "commandName": "Project",
       "commandLineArgs": "read C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "dbtest": {
+      "commandName": "Project",
+      "commandLineArgs": "dbtest C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "dbreport": {
+      "commandName": "Project",
+      "commandLineArgs": "dbreport C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
     }
   }
 }

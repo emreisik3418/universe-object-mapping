@@ -43,6 +43,12 @@
       <Private>False</Private>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
+
+    <!-- Oracle ODP.NET Managed (Oracle 19c client'tan C:\dev\libs\odpnet'e kopyalanır; saf .NET, bitness bağımsız) -->
+    <Reference Include="Oracle.ManagedDataAccess">
+      <HintPath>C:\dev\libs\odpnet\Oracle.ManagedDataAccess.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>
