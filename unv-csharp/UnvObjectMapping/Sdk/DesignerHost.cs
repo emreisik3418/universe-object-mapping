@@ -149,6 +149,14 @@ namespace UnvObjectMapping.Sdk
             }
         }
 
+        /// <summary>Donma durumunda (watchdog) bizim designer.exe sürecimizi sonlandırır.</summary>
+        public void Kill()
+        {
+            if (!pid.HasValue) return;
+            try { Process.GetProcessById(pid.Value).Kill(); }
+            catch { /* zaten kapanmış */ }
+        }
+
         public void Dispose()
         {
             if (app != null)

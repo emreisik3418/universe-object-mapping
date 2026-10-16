@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using UnvObjectMapping.App;
 using UnvObjectMapping.Config;
 using UnvObjectMapping.Credentials;
 using UnvObjectMapping.Model;
@@ -17,7 +18,8 @@ namespace UnvObjectMapping
             "  UnvObjectMapping logon <credentials.json>\n" +
             "  UnvObjectMapping read <credentials.json> [universe adında geçen metin]\n" +
             "  UnvObjectMapping dbtest <credentials.json> [universe adında geçen metin]\n" +
-            "  UnvObjectMapping dbreport <credentials.json>";
+            "  UnvObjectMapping dbreport <credentials.json>\n" +
+            "  UnvObjectMapping run <credentials.json>      <- ana çalıştırma (tüm ortamlar, tüm UNV'ler)";
 
         private const string TestSystem = "DBTEST_UNV";
 
@@ -41,6 +43,8 @@ namespace UnvObjectMapping
                         return ReadCheck(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
                     case "dbtest":
                         return DbTest(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
+                    case "run":
+                        return MappingRun.Execute(Need(args, 1, "credentials.json yolu"));
                     case "dbreport":
                         return DbReport(Need(args, 1, "credentials.json yolu"));
                     default:

@@ -38,6 +38,11 @@ Project → Properties → Debug → *Command line arguments*:
 |---|---|
 | `envcheck` | Süreç 32-bit mi, BO .NET SDK GAC_32'den mi yükleniyor, Designer açılıp kapanıyor mu |
 | `sbox C:\...\credentials.json` | Her ortam + DB için Sbox'tan kimlik bilgisi alınabiliyor mu |
+| `logon C:\...\credentials.json` | Her ortamda CMS logon + UNV listesi |
+| `read C:\...\credentials.json [ad]` | Tek UNV'yi Designer ile okur |
+| `dbtest C:\...\credentials.json [ad]` | Tek UNV'yi `DBTEST_UNV` olarak yazar, sayar, siler (gerçek veriye dokunmaz) |
+| `dbreport C:\...\credentials.json` | Tablonun SYSTEM / UNX-UNV / zaman özeti (salt okuma) |
+| **`run C:\...\credentials.json`** | **Ana çalıştırma:** tüm ortamlar, tüm UNV'ler → Oracle. Log: `logs\unv_run_*.log`. Çıkış kodu 0/1/2 |
 
 ### Neden böyle? (bulunan tuzaklar)
 - **x86 zorunlu:** `CrystalDecisions.Enterprise.*` sadece `GAC_32`'de.

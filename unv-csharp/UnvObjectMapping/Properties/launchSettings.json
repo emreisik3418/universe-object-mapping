@@ -23,6 +23,10 @@
     "dbreport": {
       "commandName": "Project",
       "commandLineArgs": "dbreport C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "run": {
+      "commandName": "Project",
+      "commandLineArgs": "run C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
     }
   }
 }
