@@ -13,7 +13,8 @@ namespace UnvObjectMapping
             "Kullanım:\n" +
             "  UnvObjectMapping envcheck\n" +
             "  UnvObjectMapping sbox <credentials.json>\n" +
-            "  UnvObjectMapping logon <credentials.json>";
+            "  UnvObjectMapping logon <credentials.json>\n" +
+            "  UnvObjectMapping read <credentials.json> [universe adında geçen metin]";
 
         private const string AuthType = "secEnterprise";
 
@@ -31,6 +32,8 @@ namespace UnvObjectMapping
                         return SboxCheck(Need(args, 1, "credentials.json yolu"));
                     case "logon":
                         return LogonCheck(Need(args, 1, "credentials.json yolu"));
+                    case "read":
+                        return ReadCheck(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
                     default:
                         Console.WriteLine(Usage);
                         return 2;
@@ -86,6 +89,50 @@ namespace UnvObjectMapping
                 }
             }
             return ok ? 0 : 1;
+        }
+
+        /// <summary>İlk ortamda tek bir UNV'yi Designer ile açar, nesnelerini okur ve kapatır.</summary>
+        private static int ReadCheck(string configPath, string filter)
+        {
+            var config = AppConfig.Load(configPath);
+            var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
+            BoEnvironment env = config.Environments[0];
+            Credential credential = sbox.Get(env.Sbox);
+            Console.WriteLine("=== " + env.Cms + " ===");
+
+            UniverseInfo target;
+            using (var session = BoSession.Logon(env.Cms, credential, AuthType))
+            {
+                target = UnvCatalog.ListUnv(session.InfoStore).FirstOrDefault(u =>
+                    filter == null || u.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            if (target == null)
+            {
+                Console.WriteLine("[HATA] Eşleşen UNV bulunamadı.");
+                return 1;
+            }
+
+            using (var designer = DesignerHost.Start())
+            {
+                Console.WriteLine("[OK]   Designer başladı. PID: " + designer.ProcessId);
+                designer.Logon(credential, env.Cms, AuthType);
+                Console.WriteLine("[OK]   Designer logon");
+
+                Console.WriteLine("Okunuyor: " + target);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var objects = designer.Read(target);
+                Console.WriteLine("[OK]   Nesne sayısı: " + objects.Count + "  Süre: " + sw.ElapsedMilliseconds + " ms");
+
+                var byQ = objects.GroupBy(o => o.Qualification).OrderBy(g => g.Key)
+                                 .Select(g => "Q" + g.Key + "=" + g.Count());
+                Console.WriteLine("       Qualification dağılımı: " + string.Join(", ", byQ));
+                foreach (var o in objects.Take(15))
+                    Console.WriteLine("       " + o);
+            }   // <- Designer Quit + gerekirse süreç sonlandırma
+
+            int left = System.Diagnostics.Process.GetProcessesByName("designer").Length;
+            Console.WriteLine((left == 0 ? "[OK]   " : "[UYARI] ") + "Kalan designer.exe: " + left);
+            return 0;
         }
 
         private static bool Try(string label, Func<Credential> get)

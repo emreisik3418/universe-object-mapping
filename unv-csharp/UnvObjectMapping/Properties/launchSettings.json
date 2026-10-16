@@ -11,6 +11,10 @@
     "logon": {
       "commandName": "Project",
       "commandLineArgs": "logon C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "read": {
+      "commandName": "Project",
+      "commandLineArgs": "read C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
     }
   }
 }
