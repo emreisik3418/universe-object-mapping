@@ -25,6 +25,10 @@ namespace UnvObjectMapping.App
     {
         private const string AuthType = "secEnterprise";
         private const int RestartEvery = 50;
+
+        // Logon (CMS veya Designer) başarısız olursa: ör. "580 Concurrent Access Licenses are in use"
+        private const int LogonAttempts = 4;
+        private static readonly TimeSpan LogonRetryWait = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan UniverseTimeout = TimeSpan.FromMinutes(10);
 
         public static int Execute(string configPath)
@@ -79,6 +83,39 @@ namespace UnvObjectMapping.App
             return allOk ? 0 : 1;
         }
 
+        private static DesignerHost StartDesigner(Credential credential, string cms, RunLog log)
+        {
+            DesignerHost d = DesignerHost.Start();
+            try
+            {
+                d.Logon(credential, cms, AuthType);
+                return d;
+            }
+            catch
+            {
+                SafeDispose(d, log);   // logon olamayan Designer'ı açık bırakma
+                throw;
+            }
+        }
+
+        /// <summary>Geçici hatalarda (lisans dolu, ağ vb.) birkaç kez bekleyip yeniden dener.</summary>
+        private static T WithRetry<T>(string what, RunLog log, Func<T> action)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return action();
+                }
+                catch (Exception ex) when (attempt < LogonAttempts)
+                {
+                    log.Warn(what + " başarısız (deneme " + attempt + "/" + LogonAttempts + "), " +
+                             (int)LogonRetryWait.TotalMinutes + " dk sonra tekrar denenecek: " + RunLog.Describe(ex));
+                    Thread.Sleep(LogonRetryWait);
+                }
+            }
+        }
+
         /// <summary>Designer kapatılırken oluşabilecek her hatayı yutar; kapatma hatası asla akışı durdurmaz.</summary>
         private static void SafeDispose(DesignerHost designer, RunLog log)
         {
@@ -95,11 +132,13 @@ namespace UnvObjectMapping.App
             var sw = Stopwatch.StartNew();
             Credential credential = sbox.Get(env.Sbox);
 
-            List<UniverseInfo> universes;
-            using (var session = BoSession.Logon(cms, credential, AuthType))
+            List<UniverseInfo> universes = WithRetry(cms + " CMS logon", log, () =>
             {
-                universes = UnvCatalog.ListUnv(session.InfoStore);
-            }   // <- Logoff; Designer kendi oturumunu açar
+                using (var session = BoSession.Logon(cms, credential, AuthType))
+                {
+                    return UnvCatalog.ListUnv(session.InfoStore);
+                }   // <- Logoff; Designer kendi oturumunu açar
+            });
             log.Info("[" + cms + "] Logon OK. UNV sayısı: " + universes.Count);
 
             if (universes.Count == 0)
@@ -125,8 +164,20 @@ namespace UnvObjectMapping.App
                     {
                         SafeDispose(designer, log);
                         designer = null;
-                        designer = DesignerHost.Start();
-                        designer.Logon(credential, cms, AuthType);
+                        try
+                        {
+                            designer = WithRetry(cms + " Designer başlatma/logon", log, () => StartDesigner(credential, cms, log));
+                        }
+                        catch (Exception ex)
+                        {
+                            // Designer hiç açılamıyor: kalan universe'leri "hatalı" say (eski satırları korunur),
+                            // okunanları KAYBETME, aşağıda DB'ye yaz.
+                            int remaining = universes.Count - i;
+                            for (int k = i; k < universes.Count; k++) failedCuids.Add(universes[k].Cuid);
+                            log.Error(label + " Designer açılamadı, kalan " + remaining +
+                                      " UNV atlandı (eski satırları korunacak)", ex);
+                            break;
+                        }
                         sinceStart = 0;
                     }
                     sinceStart++;
