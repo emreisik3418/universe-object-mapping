@@ -170,8 +170,8 @@ namespace UnvObjectMapping.Output
 
                     // Eski davranış: nesnesi olmayan universe için nesne kolonları boş tek satır
                     IEnumerable<UniverseObject> objects = entry.Value.Count > 0
-                        ? entry.Value
-                        : new[] { (UniverseObject)null };
+                        ? (IEnumerable<UniverseObject>)entry.Value
+                        : new UniverseObject[] { null };
 
                     foreach (UniverseObject o in objects)
                     {
