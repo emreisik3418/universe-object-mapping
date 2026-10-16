@@ -37,6 +37,10 @@ public class UniverseObjectMappingApp {
 
     private static final String AUTH_TYPE = System.getProperty("bo.authType", "secEnterprise");
 
+    // CMS logon başarısız olursa (ör. "580 Concurrent Access Licenses are in use") bekleyip yeniden dene
+    private static final int LOGON_ATTEMPTS = 4;
+    private static final long LOGON_RETRY_WAIT_MS = 2 * 60 * 1000L;
+
     public static void main(String[] args) {
         int exitCode;
         RunLog log = null;
@@ -111,7 +115,7 @@ public class UniverseObjectMappingApp {
         int objectCount = 0;
         int tableCount = 0;
 
-        try (BoSession session = BoSession.logon(cms, sbox.get(env.getSbox()), AUTH_TYPE);
+        try (BoSession session = logonWithRetry(cms, sbox.get(env.getSbox()), log);
              UniverseReader reader = new UniverseReader(session, workDir)) {
 
             List<UniverseInfo> universes = UniverseCatalog.listUnx(session.getInfoStore());
@@ -181,6 +185,22 @@ public class UniverseObjectMappingApp {
 
         log.info(String.format("[%s] Süre: %d sn", cms, (System.currentTimeMillis() - start) / 1000));
         return ok;
+    }
+
+    /** Geçici hatalarda (lisans dolu, ağ vb.) LOGON_ATTEMPTS kez, LOGON_RETRY_WAIT_MS arayla dener. */
+    private static BoSession logonWithRetry(String cms, Credential credential, RunLog log) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return BoSession.logon(cms, credential, AUTH_TYPE);
+            } catch (Exception e) {
+                if (attempt >= LOGON_ATTEMPTS) {
+                    throw e;
+                }
+                log.warn(String.format("[%s] CMS logon başarısız (deneme %d/%d), %d dk sonra tekrar denenecek: %s",
+                        cms, attempt, LOGON_ATTEMPTS, LOGON_RETRY_WAIT_MS / 60000, RunLog.describe(e)));
+                Thread.sleep(LOGON_RETRY_WAIT_MS);
+            }
+        }
     }
 
     /** Önceki çalıştırmadan kalmış retrieve dosyalarını temizler. */
