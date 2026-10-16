@@ -6,7 +6,7 @@ tanımlarını okuyup Oracle'daki `POPR.SDK_METADATA_UNIVERSEOM_JOB` tablosuna y
 | Klasör | Ne | Teknoloji |
 |---|---|---|
 | `unv-csharp/` | UNV (Universe Design Tool) universe'leri | C#, .NET Framework 4.8, x86 |
-| `unx-java/` *(sonra eklenecek)* | UNX (Information Design Tool) universe'leri | Java 8 (SAP JVM), SL SDK |
+| `unx-java/` | UNX (Information Design Tool) universe'leri — object + table mapping | Java 8 (SAP JVM), SL SDK |
 
 Her iki uygulama da aynı `credentials.json` dosyasını kullanır (örnek: `credentials.example.json`).
 Gerçek `credentials.json` **asla** repoya eklenmez.
