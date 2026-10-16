@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "envcheck": {
+      "commandName": "Project",
+      "commandLineArgs": "envcheck"
+    },
+    "sbox": {
+      "commandName": "Project",
+      "commandLineArgs": "sbox C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    }
+  }
+}
