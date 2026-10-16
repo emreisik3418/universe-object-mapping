@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using UnvObjectMapping.Config;
 using UnvObjectMapping.Credentials;
 using UnvObjectMapping.Model;
+using UnvObjectMapping.Sdk;
 
 namespace UnvObjectMapping
 {
@@ -10,7 +12,10 @@ namespace UnvObjectMapping
         private const string Usage =
             "Kullanım:\n" +
             "  UnvObjectMapping envcheck\n" +
-            "  UnvObjectMapping sbox <credentials.json>";
+            "  UnvObjectMapping sbox <credentials.json>\n" +
+            "  UnvObjectMapping logon <credentials.json>";
+
+        private const string AuthType = "secEnterprise";
 
         private static int Main(string[] args)
         {
@@ -24,6 +29,8 @@ namespace UnvObjectMapping
                         return 0;
                     case "sbox":
                         return SboxCheck(Need(args, 1, "credentials.json yolu"));
+                    case "logon":
+                        return LogonCheck(Need(args, 1, "credentials.json yolu"));
                     default:
                         Console.WriteLine(Usage);
                         return 2;
@@ -46,6 +53,38 @@ namespace UnvObjectMapping
             foreach (BoEnvironment env in config.Environments)
                 ok &= Try("BO  " + env.Cms, () => sbox.Get(env.Sbox));
             ok &= Try("DB", () => sbox.Get(config.DbTarget));
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>Her ortamda: Sbox -> logon -> UNV listesi -> logoff.</summary>
+        private static int LogonCheck(string configPath)
+        {
+            var config = AppConfig.Load(configPath);
+            var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
+
+            bool ok = true;
+            foreach (BoEnvironment env in config.Environments)
+            {
+                Console.WriteLine("=== " + env.Cms + " ===");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    using (var session = BoSession.Logon(env.Cms, sbox.Get(env.Sbox), AuthType))
+                    {
+                        Console.WriteLine("[OK]   Logon başarılı");
+                        var universes = UnvCatalog.ListUnv(session.InfoStore);
+                        Console.WriteLine("[OK]   UNV sayısı: " + universes.Count);
+                        foreach (var u in universes.Take(10))
+                            Console.WriteLine("       " + u);
+                    }   // <- Logoff burada, hata olsa bile
+                    Console.WriteLine("[OK]   Logoff. Süre: " + sw.ElapsedMilliseconds + " ms");
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    Console.WriteLine("[HATA] " + ex);
+                }
+            }
             return ok ? 0 : 1;
         }
 

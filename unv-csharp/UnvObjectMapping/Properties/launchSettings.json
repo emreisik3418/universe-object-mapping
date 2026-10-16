@@ -7,6 +7,10 @@
     "sbox": {
       "commandName": "Project",
       "commandLineArgs": "sbox C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "logon": {
+      "commandName": "Project",
+      "commandLineArgs": "logon C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
     }
   }
 }
