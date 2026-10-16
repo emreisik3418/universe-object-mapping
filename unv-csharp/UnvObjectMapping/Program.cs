@@ -133,8 +133,13 @@ namespace UnvObjectMapping
 
                 Console.WriteLine("Okunuyor: " + target);
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var objects = designer.Read(target);
+                var content = designer.Read(target);
+                var objects = content.Objects;
                 Console.WriteLine("[OK]   Nesne sayısı: " + objects.Count + "  Süre: " + sw.ElapsedMilliseconds + " ms");
+                Console.WriteLine("[OK]   Tablo sayısı: " + content.Tables.Count +
+                    (content.TableError != null ? "  (TABLO HATASI: " + content.TableError.Message + ")" : ""));
+                foreach (var t in content.Tables.Take(15))
+                    Console.WriteLine("       T: " + t);
 
                 var byQ = objects.GroupBy(o => o.Qualification).OrderBy(g => g.Key)
                                  .Select(g => "Q" + g.Key + "=" + g.Count());
@@ -175,7 +180,7 @@ namespace UnvObjectMapping
             using (var designer = DesignerHost.Start())
             {
                 designer.Logon(credential, env.Cms, AuthType);
-                data[target] = designer.Read(target);
+                data[target] = designer.Read(target).Objects;
             }
             Console.WriteLine("[OK]   Okundu: " + target + " -> " + data[target].Count + " nesne");
 
@@ -198,11 +203,20 @@ namespace UnvObjectMapping
             var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
             var writer = new OracleMetadataWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
 
+            var tableWriter = new OracleTableMappingWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
+            PrintReport("POPR.SDK_METADATA_UNIVERSEOM_JOB (object mapping)", writer.Report());
+            Console.WriteLine();
+            PrintReport("POPR.SDK_METADATA_UNIVERSETM_JOB (table mapping)", tableWriter.Report());
+            return 0;
+        }
+
+        private static void PrintReport(string title, System.Collections.Generic.List<string[]> rows)
+        {
+            Console.WriteLine("=== " + title + " ===");
             Console.WriteLine(string.Format("{0,-30} {1,-4} {2,-17} {3,10} {4,10}", "SYSTEM", "TUR", "ZAMAN", "SATIR", "UNIVERSE"));
             Console.WriteLine(new string('-', 75));
-            foreach (var r in writer.Report())
+            foreach (var r in rows)
                 Console.WriteLine(string.Format("{0,-30} {1,-4} {2,-17} {3,10} {4,10}", r[0], r[1], r[2], r[3], r[4]));
-            return 0;
         }
 
         private static bool Try(string label, Func<Credential> get)

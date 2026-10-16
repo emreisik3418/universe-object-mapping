@@ -60,7 +60,9 @@ namespace UnvObjectMapping.App
             var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
 
             // DB kimlik bilgisini en başta al: sorun varsa saatlerce okuma yaptıktan sonra değil, hemen öğrenelim
-            var writer = new OracleMetadataWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
+            Credential dbCredential = sbox.Get(config.DbTarget);
+            var writer = new OracleMetadataWriter(config.DbJdbcUrl, dbCredential);
+            var tableWriter = new OracleTableMappingWriter(config.DbJdbcUrl, dbCredential);
 
             DateTime exportDate = DateTime.Now;
             bool allOk = true;
@@ -69,7 +71,7 @@ namespace UnvObjectMapping.App
             {
                 try
                 {
-                    allOk &= ProcessEnvironment(env, sbox, writer, exportDate, log);
+                    allOk &= ProcessEnvironment(env, sbox, writer, tableWriter, exportDate, log);
                 }
                 catch (Exception ex)
                 {
@@ -126,7 +128,8 @@ namespace UnvObjectMapping.App
 
         /// <returns>Ortamdaki her şey sorunsuzsa true</returns>
         private static bool ProcessEnvironment(BoEnvironment env, SboxCredentialProvider sbox,
-                                               OracleMetadataWriter writer, DateTime exportDate, RunLog log)
+                                               OracleMetadataWriter writer, OracleTableMappingWriter tableWriter,
+                                               DateTime exportDate, RunLog log)
         {
             string cms = env.Cms;
             var sw = Stopwatch.StartNew();
@@ -149,7 +152,10 @@ namespace UnvObjectMapping.App
 
             var data = new Dictionary<UniverseInfo, List<UniverseObject>>();
             var failedCuids = new List<string>();
+            var tableData = new Dictionary<UniverseInfo, List<UniverseTable>>();
+            var failedTableCuids = new List<string>();
             int objectCount = 0;
+            int tableCount = 0;
 
             DesignerHost designer = null;
             int sinceStart = 0;
@@ -173,7 +179,11 @@ namespace UnvObjectMapping.App
                             // Designer hiç açılamıyor: kalan universe'leri "hatalı" say (eski satırları korunur),
                             // okunanları KAYBETME, aşağıda DB'ye yaz.
                             int remaining = universes.Count - i;
-                            for (int k = i; k < universes.Count; k++) failedCuids.Add(universes[k].Cuid);
+                            for (int k = i; k < universes.Count; k++)
+                            {
+                                failedCuids.Add(universes[k].Cuid);
+                                failedTableCuids.Add(universes[k].Cuid);
+                            }
                             log.Error(label + " Designer açılamadı, kalan " + remaining +
                                       " UNV atlandı (eski satırları korunacak)", ex);
                             break;
@@ -189,14 +199,26 @@ namespace UnvObjectMapping.App
                     {
                         try
                         {
-                            List<UniverseObject> objects = designer.Read(u);
-                            data[u] = objects;
-                            objectCount += objects.Count;
-                            log.Info(label + " OK    " + u + " (" + objects.Count + " nesne)");
+                            UniverseContent content = designer.Read(u);
+                            data[u] = content.Objects;
+                            objectCount += content.Objects.Count;
+
+                            if (content.TableError == null)
+                            {
+                                tableData[u] = content.Tables;
+                                tableCount += content.Tables.Count;
+                            }
+                            else
+                            {
+                                failedTableCuids.Add(u.Cuid);
+                                log.Warn(label + " Tablolar okunamadı (nesneler OK) " + u + " : " + RunLog.Describe(content.TableError));
+                            }
+                            log.Info(label + " OK    " + u + " (" + content.Objects.Count + " nesne, " + content.Tables.Count + " tablo)");
                         }
                         catch (Exception ex)
                         {
                             failedCuids.Add(u.Cuid);
+                            failedTableCuids.Add(u.Cuid);
                             log.Error(label + " HATA  " + u + (timedOut ? " (zaman aşımı, Designer sonlandırıldı)" : ""), ex);
 
                             // Hatadan sonra Designer'ın durumuna güvenme: kapat, sıradaki universe'te yeniden başlat
@@ -217,11 +239,43 @@ namespace UnvObjectMapping.App
                 return false;
             }
 
-            int inserted = writer.ReplaceSystem(cms, exportDate, data, failedCuids);
-            log.Info(string.Format("[{0}] DB'ye yazıldı: {1} satır. Okunan: {2}/{3} UNV, {4} nesne. Hatalı: {5}. Süre: {6} sn",
-                cms, inserted, data.Count, universes.Count, objectCount, failedCuids.Count, (int)sw.Elapsed.TotalSeconds));
+            bool ok = failedCuids.Count == 0 && failedTableCuids.Count == 0;
 
-            return failedCuids.Count == 0;
+            // Object mapping ve table mapping ayrı transaction: birinin hatası diğerini engellemez
+            try
+            {
+                int inserted = writer.ReplaceSystem(cms, exportDate, data, failedCuids);
+                log.Info(string.Format("[{0}] Object mapping yazıldı: {1} satır ({2}/{3} UNV, {4} nesne, hatalı {5})",
+                    cms, inserted, data.Count, universes.Count, objectCount, failedCuids.Count));
+            }
+            catch (Exception ex)
+            {
+                ok = false;
+                log.Error("[" + cms + "] Object mapping DB'ye yazılamadı (eski veri korundu)", ex);
+            }
+
+            if (tableData.Count == 0)
+            {
+                ok = false;
+                log.Error("[" + cms + "] Hiçbir UNV'nin tabloları okunamadı. Table mapping'e dokunulmadı.");
+            }
+            else
+            {
+                try
+                {
+                    int inserted = tableWriter.ReplaceSystem(cms, exportDate, tableData, failedTableCuids);
+                    log.Info(string.Format("[{0}] Table mapping yazıldı: {1} satır ({2} UNV, {3} tablo, hatalı {4})",
+                        cms, inserted, tableData.Count, tableCount, failedTableCuids.Count));
+                }
+                catch (Exception ex)
+                {
+                    ok = false;
+                    log.Error("[" + cms + "] Table mapping DB'ye yazılamadı (eski veri korundu)", ex);
+                }
+            }
+
+            log.Info("[" + cms + "] Süre: " + (int)sw.Elapsed.TotalSeconds + " sn");
+            return ok;
         }
     }
 }

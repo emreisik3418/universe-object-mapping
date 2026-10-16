@@ -59,8 +59,8 @@ namespace UnvObjectMapping.Sdk
             app.Logon(credential.Username, credential.Password, cms, authType);
         }
 
-        /// <summary>Universe'ü CMS'ten açar, tüm class/object'leri okur ve kapatır.</summary>
-        public List<UniverseObject> Read(UniverseInfo universe)
+        /// <summary>Universe'ü CMS'ten açar, class/object'leri ve tabloları okur, kapatır.</summary>
+        public UniverseContent Read(UniverseInfo universe)
         {
             dynamic universes = null;
             dynamic unv = null;
@@ -80,7 +80,31 @@ namespace UnvObjectMapping.Sdk
                     }
                     Release(classes);
                 }
-                return result;
+
+                // Tablolar: hata olursa nesneler yine geçerli kalır
+                var tables = new List<UniverseTable>();
+                Exception tableError = null;
+                try
+                {
+                    var unique = new HashSet<UniverseTable>();
+                    dynamic unvTables = unv.Tables;
+                    if ((object)unvTables != null)
+                    {
+                        foreach (dynamic t in unvTables)
+                        {
+                            UniverseTable ut = ToUniverseTable(t, 0);
+                            if (ut != null && unique.Add(ut)) tables.Add(ut);
+                            Release((object)t);
+                        }
+                        Release((object)unvTables);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    tableError = ex;
+                }
+
+                return new UniverseContent(result, tables, tableError);
             }
             finally
             {
@@ -91,6 +115,43 @@ namespace UnvObjectMapping.Sdk
                 }
                 Release((object)universes);
             }
+        }
+
+        /// <summary>
+        /// Java/UNX ile aynı kurallar: derived -> "Derived.&lt;ad&gt;" + SQL, alias -> asıl tablo, fiziksel -> adı.
+        /// </summary>
+        private static UniverseTable ToUniverseTable(dynamic t, int depth)
+        {
+            string name = Convert.ToString(t.Name);
+
+            if (TryBool(() => t.IsDerived))
+            {
+                string sql = TryString(() => t.SqlOfDerivedTable);
+                return new UniverseTable("Derived." + name, Clean(sql));
+            }
+
+            if (depth < 20 && TryBool(() => t.IsAlias))
+            {
+                object original = null;
+                try { original = t.OriginalTable; } catch { /* yoksay */ }
+                if (original != null)
+                {
+                    try { return ToUniverseTable((dynamic)original, depth + 1); }
+                    finally { Release(original); }
+                }
+            }
+
+            return new UniverseTable(name, null);
+        }
+
+        private static bool TryBool(Func<object> get)
+        {
+            try { return Convert.ToBoolean(get()); } catch { return false; }
+        }
+
+        private static string TryString(Func<object> get)
+        {
+            try { return Convert.ToString(get()); } catch { return null; }
         }
 
         private static void Collect(dynamic cls, string parentPath, List<UniverseObject> result)
