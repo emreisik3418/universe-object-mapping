@@ -79,6 +79,14 @@ namespace UnvObjectMapping.App
             return allOk ? 0 : 1;
         }
 
+        /// <summary>Designer kapatılırken oluşabilecek her hatayı yutar; kapatma hatası asla akışı durdurmaz.</summary>
+        private static void SafeDispose(DesignerHost designer, RunLog log)
+        {
+            if (designer == null) return;
+            try { designer.Dispose(); }
+            catch (Exception ex) { log.Warn("Designer kapatılırken hata (yoksayıldı): " + RunLog.Describe(ex)); }
+        }
+
         /// <returns>Ortamdaki her şey sorunsuzsa true</returns>
         private static bool ProcessEnvironment(BoEnvironment env, SboxCredentialProvider sbox,
                                                OracleMetadataWriter writer, DateTime exportDate, RunLog log)
@@ -115,7 +123,7 @@ namespace UnvObjectMapping.App
 
                     if (designer == null || sinceStart >= RestartEvery)
                     {
-                        designer?.Dispose();
+                        SafeDispose(designer, log);
                         designer = null;
                         designer = DesignerHost.Start();
                         designer.Logon(credential, cms, AuthType);
@@ -141,7 +149,7 @@ namespace UnvObjectMapping.App
                             log.Error(label + " HATA  " + u + (timedOut ? " (zaman aşımı, Designer sonlandırıldı)" : ""), ex);
 
                             // Hatadan sonra Designer'ın durumuna güvenme: kapat, sıradaki universe'te yeniden başlat
-                            designer.Dispose();
+                            SafeDispose(designer, log);
                             designer = null;
                         }
                     }
@@ -149,7 +157,7 @@ namespace UnvObjectMapping.App
             }
             finally
             {
-                designer?.Dispose();
+                SafeDispose(designer, log);
             }
 
             if (data.Count == 0)

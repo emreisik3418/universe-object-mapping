@@ -71,7 +71,7 @@ namespace UnvObjectMapping.Sdk
 
                 var result = new List<UniverseObject>();
                 dynamic classes = unv.Classes;
-                if (classes != null)
+                if ((object)classes != null)
                 {
                     foreach (dynamic cls in classes)
                     {
@@ -84,12 +84,12 @@ namespace UnvObjectMapping.Sdk
             }
             finally
             {
-                if (unv != null)
+                if ((object)unv != null)
                 {
                     try { unv.Close(); } catch (Exception ex) { Console.WriteLine("[UYARI] Universe kapatılamadı: " + ex.Message); }
-                    Release(unv);
+                    Release((object)unv);
                 }
-                Release(universes);
+                Release((object)universes);
             }
         }
 
@@ -99,7 +99,7 @@ namespace UnvObjectMapping.Sdk
             string path = parentPath == null ? name : parentPath + "\\" + name;
 
             dynamic objects = cls.Objects;
-            if (objects != null)
+            if ((object)objects != null)
             {
                 foreach (dynamic o in objects)
                 {
@@ -119,7 +119,7 @@ namespace UnvObjectMapping.Sdk
             }
 
             dynamic subClasses = cls.Classes;
-            if (subClasses != null)
+            if ((object)subClasses != null)
             {
                 foreach (dynamic sub in subClasses)
                 {
@@ -157,16 +157,27 @@ namespace UnvObjectMapping.Sdk
             catch { /* zaten kapanmış */ }
         }
 
+        /// <summary>
+        /// Designer'ı kapatır. ASLA exception fırlatmaz: Designer süreci ölmüş olsa bile
+        /// (ör. watchdog sonlandırdıysa) güvenle çağrılabilir.
+        /// Not: dynamic değişkende "app != null" bile COM nesnesine dokunur; bu yüzden (object) ile kontrol edilir.
+        /// </summary>
         public void Dispose()
         {
-            if (app != null)
+            object comApp = app;
+            app = null;
+            if (comApp != null)
             {
-                try { app.Quit(); } catch (Exception ex) { Console.WriteLine("[UYARI] Designer Quit: " + ex.Message); }
-                Release((object)app);
-                app = null;
+                try { ((dynamic)comApp).Quit(); }
+                catch (Exception ex) { Console.WriteLine("[UYARI] Designer Quit: " + ex.Message); }
+                Release(comApp);
             }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            try
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+            catch { /* yoksay */ }
 
             if (pid.HasValue)
             {
@@ -179,8 +190,7 @@ namespace UnvObjectMapping.Sdk
                         Console.WriteLine("[UYARI] designer.exe (PID " + pid + ") kapanmadı, sonlandırıldı.");
                     }
                 }
-                catch (ArgumentException) { /* zaten kapanmış */ }
-                catch (InvalidOperationException) { /* zaten kapanmış */ }
+                catch (Exception) { /* zaten kapanmış */ }
             }
         }
     }
