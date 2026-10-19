@@ -81,51 +81,6 @@ namespace UnvObjectMapping.Output
             }
         }
 
-        /// <summary>
-        /// Sadece verilen universe'lerin (UNIVERSE_CUID) UNV satırlarını tek transaction'da yeniler
-        /// (retry modu). Sistemin diğer universe'lerine dokunulmaz.
-        /// </summary>
-        /// <returns>Eklenen satır sayısı</returns>
-        public int ReplaceUniverses(string system, DateTime exportDate,
-                                    IDictionary<UniverseInfo, List<UniverseObject>> data)
-        {
-            if (data.Count == 0) return 0;
-            using (var conn = new OracleConnection(connectionString))
-            {
-                conn.Open();
-                using (OracleTransaction tx = conn.BeginTransaction())
-                {
-                    try
-                    {
-                        var cuids = data.Keys.Select(u => u.Cuid).Where(c => !string.IsNullOrEmpty(c)).Distinct().ToList();
-                        for (int start = 0; start < cuids.Count; start += MaxFailedCuids)
-                        {
-                            var chunk = cuids.Skip(start).Take(MaxFailedCuids).ToList();
-                            string sql = "DELETE FROM " + Table + " WHERE SYSTEM = :sys AND " + NotUnx +
-                                         " AND UNIVERSE_CUID IN (" + string.Join(",", chunk.Select((c, i) => ":c" + i)) + ")";
-                            using (var cmd = new OracleCommand(sql, conn))
-                            {
-                                cmd.BindByName = true;
-                                cmd.CommandTimeout = 600;
-                                cmd.Parameters.Add("sys", OracleDbType.Varchar2).Value = system;
-                                for (int i = 0; i < chunk.Count; i++)
-                                    cmd.Parameters.Add("c" + i, OracleDbType.Varchar2).Value = chunk[i];
-                                cmd.ExecuteNonQuery();
-                            }
-                        }
-                        int inserted = Insert(conn, system, exportDate, data);
-                        tx.Commit();
-                        return inserted;
-                    }
-                    catch
-                    {
-                        tx.Rollback();
-                        throw;
-                    }
-                }
-            }
-        }
-
         public int CountUnvRows(string system)
         {
             using (var conn = new OracleConnection(connectionString))
@@ -186,7 +141,7 @@ namespace UnvObjectMapping.Output
             }
         }
 
-        private static int Insert(OracleConnection conn, string system, DateTime exportDate,
+        internal static int Insert(OracleConnection conn, string system, DateTime exportDate,
                                   IDictionary<UniverseInfo, List<UniverseObject>> data)
         {
             int total = 0;
