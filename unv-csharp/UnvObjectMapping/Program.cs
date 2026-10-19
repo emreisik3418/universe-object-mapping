@@ -19,7 +19,9 @@ namespace UnvObjectMapping
             "  UnvObjectMapping read <credentials.json> [universe adında geçen metin]\n" +
             "  UnvObjectMapping dbtest <credentials.json> [universe adında geçen metin]\n" +
             "  UnvObjectMapping dbreport <credentials.json>\n" +
-            "  UnvObjectMapping run <credentials.json>      <- ana çalıştırma (tüm ortamlar, tüm UNV'ler)";
+            "  UnvObjectMapping run <credentials.json>      <- ana çalıştırma (tüm ortamlar, tüm UNV'ler)\n" +
+            "  UnvObjectMapping retry <credentials.json> [log dosyası]   <- sadece log'da hatalı görünen UNV'leri tekrar okur\n" +
+            "                                            (log verilmezse logs\\ altındaki en yeni unv_*.log)";
 
         private const string TestSystem = "DBTEST_UNV";
 
@@ -45,6 +47,8 @@ namespace UnvObjectMapping
                         return DbTest(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
                     case "run":
                         return MappingRun.Execute(Need(args, 1, "credentials.json yolu"));
+                    case "retry":
+                        return RetryRun.Execute(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
                     case "dbreport":
                         return DbReport(Need(args, 1, "credentials.json yolu"));
                     default:

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using UnvObjectMapping.Config;
 using UnvObjectMapping.Credentials;
 using UnvObjectMapping.Model;
@@ -14,23 +13,13 @@ namespace UnvObjectMapping.App
     /// <summary>
     /// Ana akış: tüm ortamlar, tüm UNV'ler.
     ///
-    /// - Hata veren universe loglanır ve atlanır; eski satırları DB'de korunur.
-    /// - Designer her RestartEvery universe'te bir ve HER HATADAN SONRA yeniden başlatılır
-    ///   (bellek şişmesin, bozuk durumda kalmasın).
-    /// - Bir universe UniverseTimeout süresini aşarsa Designer süreci sonlandırılır (donma koruması).
+    /// - Okuma döngüsü (yeniden başlatma, zaman aşımı, hata yönetimi): UniverseBatchReader.
+    /// - Hata veren universe'lerin eski satırları DB'de korunur; sonra "retry" moduyla tekrar okunabilir.
     /// - Bir ortamda hiç UNV listelenemezse veya hiçbiri okunamazsa o ortam için DB'ye DOKUNULMAZ.
     /// - Çıkış kodu: 0 = her şey başarılı, 1 = bazı universe/ortamlarda hata, 2 = uygulama başlayamadı.
     /// </summary>
     internal static class MappingRun
     {
-        private const string AuthType = "secEnterprise";
-        private const int RestartEvery = 50;
-
-        // Logon (CMS veya Designer) başarısız olursa: ör. "580 Concurrent Access Licenses are in use"
-        private const int LogonAttempts = 4;
-        private static readonly TimeSpan LogonRetryWait = TimeSpan.FromMinutes(2);
-        private static readonly TimeSpan UniverseTimeout = TimeSpan.FromMinutes(10);
-
         public static int Execute(string configPath)
         {
             RunLog log = null;
@@ -85,47 +74,6 @@ namespace UnvObjectMapping.App
             return allOk ? 0 : 1;
         }
 
-        private static DesignerHost StartDesigner(Credential credential, string cms, RunLog log)
-        {
-            DesignerHost d = DesignerHost.Start();
-            try
-            {
-                d.Logon(credential, cms, AuthType);
-                return d;
-            }
-            catch
-            {
-                SafeDispose(d, log);   // logon olamayan Designer'ı açık bırakma
-                throw;
-            }
-        }
-
-        /// <summary>Geçici hatalarda (lisans dolu, ağ vb.) birkaç kez bekleyip yeniden dener.</summary>
-        private static T WithRetry<T>(string what, RunLog log, Func<T> action)
-        {
-            for (int attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    return action();
-                }
-                catch (Exception ex) when (attempt < LogonAttempts)
-                {
-                    log.Warn(what + " başarısız (deneme " + attempt + "/" + LogonAttempts + "), " +
-                             (int)LogonRetryWait.TotalMinutes + " dk sonra tekrar denenecek: " + RunLog.Describe(ex));
-                    Thread.Sleep(LogonRetryWait);
-                }
-            }
-        }
-
-        /// <summary>Designer kapatılırken oluşabilecek her hatayı yutar; kapatma hatası asla akışı durdurmaz.</summary>
-        private static void SafeDispose(DesignerHost designer, RunLog log)
-        {
-            if (designer == null) return;
-            try { designer.Dispose(); }
-            catch (Exception ex) { log.Warn("Designer kapatılırken hata (yoksayıldı): " + RunLog.Describe(ex)); }
-        }
-
         /// <returns>Ortamdaki her şey sorunsuzsa true</returns>
         private static bool ProcessEnvironment(BoEnvironment env, SboxCredentialProvider sbox,
                                                OracleMetadataWriter writer, OracleTableMappingWriter tableWriter,
@@ -135,9 +83,9 @@ namespace UnvObjectMapping.App
             var sw = Stopwatch.StartNew();
             Credential credential = sbox.Get(env.Sbox);
 
-            List<UniverseInfo> universes = WithRetry(cms + " CMS logon", log, () =>
+            List<UniverseInfo> universes = UniverseBatchReader.WithRetry(cms + " CMS logon", log, () =>
             {
-                using (var session = BoSession.Logon(cms, credential, AuthType))
+                using (var session = BoSession.Logon(cms, credential, UniverseBatchReader.AuthType))
                 {
                     return UnvCatalog.ListUnv(session.InfoStore);
                 }   // <- Logoff; Designer kendi oturumunu açar
@@ -150,88 +98,13 @@ namespace UnvObjectMapping.App
                 return false;
             }
 
-            var data = new Dictionary<UniverseInfo, List<UniverseObject>>();
-            var failedCuids = new List<string>();
-            var tableData = new Dictionary<UniverseInfo, List<UniverseTable>>();
-            var failedTableCuids = new List<string>();
-            int objectCount = 0;
-            int tableCount = 0;
-
-            DesignerHost designer = null;
-            int sinceStart = 0;
-            try
-            {
-                for (int i = 0; i < universes.Count; i++)
-                {
-                    UniverseInfo u = universes[i];
-                    string label = string.Format("[{0}] {1}/{2}", cms, i + 1, universes.Count);
-
-                    if (designer == null || sinceStart >= RestartEvery)
-                    {
-                        SafeDispose(designer, log);
-                        designer = null;
-                        try
-                        {
-                            designer = WithRetry(cms + " Designer başlatma/logon", log, () => StartDesigner(credential, cms, log));
-                        }
-                        catch (Exception ex)
-                        {
-                            // Designer hiç açılamıyor: kalan universe'leri "hatalı" say (eski satırları korunur),
-                            // okunanları KAYBETME, aşağıda DB'ye yaz.
-                            int remaining = universes.Count - i;
-                            for (int k = i; k < universes.Count; k++)
-                            {
-                                failedCuids.Add(universes[k].Cuid);
-                                failedTableCuids.Add(universes[k].Cuid);
-                            }
-                            log.Error(label + " Designer açılamadı, kalan " + remaining +
-                                      " UNV atlandı (eski satırları korunacak)", ex);
-                            break;
-                        }
-                        sinceStart = 0;
-                    }
-                    sinceStart++;
-
-                    bool timedOut = false;
-                    DesignerHost current = designer;
-                    using (new Timer(_ => { timedOut = true; current.Kill(); },
-                                     null, UniverseTimeout, Timeout.InfiniteTimeSpan))
-                    {
-                        try
-                        {
-                            UniverseContent content = designer.Read(u);
-                            data[u] = content.Objects;
-                            objectCount += content.Objects.Count;
-
-                            if (content.TableError == null)
-                            {
-                                tableData[u] = content.Tables;
-                                tableCount += content.Tables.Count;
-                            }
-                            else
-                            {
-                                failedTableCuids.Add(u.Cuid);
-                                log.Warn(label + " Tablolar okunamadı (nesneler OK) " + u + " : " + RunLog.Describe(content.TableError));
-                            }
-                            log.Info(label + " OK    " + u + " (" + content.Objects.Count + " nesne, " + content.Tables.Count + " tablo)");
-                        }
-                        catch (Exception ex)
-                        {
-                            failedCuids.Add(u.Cuid);
-                            failedTableCuids.Add(u.Cuid);
-                            log.Error(label + " HATA  " + u + (timedOut ? " (zaman aşımı, Designer sonlandırıldı)" : ""), ex);
-
-                            // Hatadan sonra Designer'ın durumuna güvenme: kapat, sıradaki universe'te yeniden başlat
-                            SafeDispose(designer, log);
-                            designer = null;
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                SafeDispose(designer, log);
-            }
+            BatchResult r = UniverseBatchReader.Read(universes, credential, cms, log);
+            var data = r.Objects;
+            var tableData = r.Tables;
+            var failedCuids = r.FailedCuids;
+            var failedTableCuids = r.FailedTableCuids;
+            int objectCount = r.ObjectCount;
+            int tableCount = r.TableCount;
 
             if (data.Count == 0)
             {

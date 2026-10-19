@@ -27,6 +27,10 @@
     "run": {
       "commandName": "Project",
       "commandLineArgs": "run C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
+    },
+    "retry": {
+      "commandName": "Project",
+      "commandLineArgs": "retry C:\\batchs\\BusinessObjects\\UNIVERSEOBJECTMAPPING\\config\\credentials.json"
     }
   }
 }

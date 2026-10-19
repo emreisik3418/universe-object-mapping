@@ -18,10 +18,10 @@ namespace UnvObjectMapping.App
 
         public string Path { get; }
 
-        public static RunLog Open(string directory)
+        public static RunLog Open(string directory, string prefix = "unv_run")
         {
             Directory.CreateDirectory(directory);
-            string name = "unv_run_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".log";
+            string name = prefix + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".log";
             return new RunLog(System.IO.Path.Combine(directory, name));
         }
 

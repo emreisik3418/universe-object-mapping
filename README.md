@@ -41,8 +41,9 @@ Project → Properties → Debug → *Command line arguments*:
 | `logon C:\...\credentials.json` | Her ortamda CMS logon + UNV listesi |
 | `read C:\...\credentials.json [ad]` | Tek UNV'yi Designer ile okur |
 | `dbtest C:\...\credentials.json [ad]` | Tek UNV'yi `DBTEST_UNV` olarak yazar, sayar, siler (gerçek veriye dokunmaz) |
-| `dbreport C:\...\credentials.json` | Tablonun SYSTEM / UNX-UNV / zaman özeti (salt okuma) |
+| `dbreport C:\...\credentials.json` | OM ve TM tablolarının SYSTEM / UNX-UNV / zaman özeti (salt okuma) |
 | **`run C:\...\credentials.json`** | **Ana çalıştırma:** tüm ortamlar, tüm UNV'ler → Oracle. Log: `logs\unv_run_*.log`. Çıkış kodu 0/1/2 |
+| `retry C:\...\credentials.json [log]` | Sadece verilen log'da (`HATA` / `ATLANDI` / `Tablolar okunamadı`) görünen UNV'leri tekrar okur; DB'de **sadece onların** satırlarını yeniler. Log verilmezse `logs\` altındaki en yeni `unv_*.log`. Kendi log'u `logs\unv_retry_*.log` |
 
 ### Neden böyle? (bulunan tuzaklar)
 - **x86 zorunlu:** `CrystalDecisions.Enterprise.*` sadece `GAC_32`'de.
