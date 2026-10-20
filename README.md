@@ -41,7 +41,8 @@ Project → Properties → Debug → *Command line arguments*:
 | `logon C:\...\credentials.json` | Her ortamda CMS logon + UNV listesi |
 | `read C:\...\credentials.json [ad]` | Tek UNV'yi Designer ile okur |
 | `dbtest C:\...\credentials.json [ad]` | Tek UNV'yi `DBTEST_UNV` olarak yazar, sayar, siler (gerçek veriye dokunmaz) |
-| `dbreport C:\...\credentials.json` | OM ve TM tablolarının SYSTEM / UNX-UNV / zaman özeti (salt okuma) |
+| `dbreport C:\...\credentials.json` | OM ve TM tablolarının SYSTEM / UNX-UNV / zaman özeti + son run'da güncellenmemiş universe listesi (salt okuma) |
+| `purge C:\...\credentials.json` | **TEK SEFERLİK:** OM ve TM tablolarındaki TÜM satırları (UNX + UNV) siler. Konsolda `SIL` yazılmadan bir şey yapmaz. Sonrasında Java ve C# `run` ile yeniden doldurulur |
 | **`run C:\...\credentials.json`** | **Ana çalıştırma:** tüm ortamlar, tüm UNV'ler → Oracle. Log: `logs\unv_run_*.log`. Çıkış kodu 0/1/2 |
 | `retry C:\...\credentials.json [log]` | Sadece verilen log'da hatalı görünen UNV'leri (`HATA` / `ATLANDI` / `Tablolar okunamadı`) tekrar okur ve DB'de **sadece onların** satırlarını yeniler. Log'da ortam düzeyinde hata varsa (ör. "Designer açılamadı, kalan N UNV atlandı") eksikler DB'den bulunur: log başlangıcından beri yazılmamış her UNV. Log verilmezse `logs\` altındaki en yeni `unv_*.log`. Kendi log'u `logs\unv_retry_*.log` |
 

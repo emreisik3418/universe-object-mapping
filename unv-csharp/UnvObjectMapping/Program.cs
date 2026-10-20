@@ -20,6 +20,7 @@ namespace UnvObjectMapping
             "  UnvObjectMapping dbtest <credentials.json> [universe adında geçen metin]\n" +
             "  UnvObjectMapping dbreport <credentials.json>\n" +
             "  UnvObjectMapping run <credentials.json>      <- ana çalıştırma (tüm ortamlar, tüm UNV'ler)\n" +
+            "  UnvObjectMapping purge <credentials.json>    <- TEK SEFERLİK: OM ve TM tablolarındaki TÜM satırları siler (onay ister)\n" +
             "  UnvObjectMapping retry <credentials.json> [log dosyası]   <- sadece log'da hatalı görünen UNV'leri tekrar okur\n" +
             "                                            (log verilmezse logs\\ altındaki en yeni unv_*.log)";
 
@@ -51,6 +52,8 @@ namespace UnvObjectMapping
                         return RetryRun.Execute(Need(args, 1, "credentials.json yolu"), args.Length > 2 ? args[2] : null);
                     case "dbreport":
                         return DbReport(Need(args, 1, "credentials.json yolu"));
+                    case "purge":
+                        return Purge(Need(args, 1, "credentials.json yolu"));
                     default:
                         Console.WriteLine(Usage);
                         return 2;
@@ -211,6 +214,46 @@ namespace UnvObjectMapping
             PrintReport("POPR.SDK_METADATA_UNIVERSEOM_JOB (object mapping)", writer.Report());
             Console.WriteLine();
             PrintReport("POPR.SDK_METADATA_UNIVERSETM_JOB (table mapping)", tableWriter.Report());
+
+            // Son run'da güncellenmemiş universe'ler (okunamamış veya ortamı başarısız olmuş)
+            var stale = new UnvDbWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget)).StaleUniverses();
+            Console.WriteLine();
+            Console.WriteLine("=== Son run'da güncellenmemiş universe'ler: " + stale.Count + " ===");
+            if (stale.Count > 0)
+            {
+                Console.WriteLine(string.Format("{0,-3} {1,-22} {2,-4} {3,-17} {4,-17} {5}", "TBL", "SYSTEM", "TUR", "UNIVERSE TARİHİ", "ANA RUN", "UNIVERSE [CUID]"));
+                Console.WriteLine(new string('-', 110));
+                foreach (var r in stale)
+                    Console.WriteLine(string.Format("{0,-3} {1,-22} {2,-4} {3,-17} {4,-17} {5} [{6}]", r[0], r[1], r[2], r[5], r[6], r[3], r[4]));
+            }
+            return 0;
+        }
+
+        /// <summary>TEK SEFERLİK: iki tablodaki tüm satırları siler. Konsoldan "SIL" yazılmadan hiçbir şey yapmaz.</summary>
+        private static int Purge(string configPath)
+        {
+            var config = AppConfig.Load(configPath);
+            var sbox = new SboxCredentialProvider(config.SboxEndpoint, config.SboxUsername, config.SboxPassword);
+            var db = new UnvDbWriter(config.DbJdbcUrl, sbox.Get(config.DbTarget));
+
+            int[] before = db.CountAll();
+            Console.WriteLine("POPR.SDK_METADATA_UNIVERSEOM_JOB : " + before[0] + " satır");
+            Console.WriteLine("POPR.SDK_METADATA_UNIVERSETM_JOB : " + before[1] + " satır");
+            Console.WriteLine();
+            Console.WriteLine("DİKKAT: Bu iki tablodaki TÜM satırlar (UNX + UNV, tüm SYSTEM'ler) silinecek. GERİ ALINAMAZ.");
+            Console.WriteLine("Sonrasında Java (UNX) ve C# (UNV) run'larını çalıştırarak tabloları yeniden doldurun.");
+            Console.Write("Devam etmek için büyük harflerle SIL yazıp Enter'a basın: ");
+            string answer = Console.ReadLine();
+            if (answer == null || answer.Trim() != "SIL")
+            {
+                Console.WriteLine("İptal edildi. Hiçbir şey silinmedi.");
+                return 1;
+            }
+
+            int[] removed = db.PurgeAll();
+            Console.WriteLine("[OK]   Silindi. OM: " + removed[0] + ", TM: " + removed[1]);
+            int[] after = db.CountAll();
+            Console.WriteLine("[OK]   Kalan satır. OM: " + after[0] + ", TM: " + after[1]);
             return 0;
         }
 

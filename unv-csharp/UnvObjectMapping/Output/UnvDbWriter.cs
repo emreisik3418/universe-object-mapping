@@ -61,6 +61,108 @@ namespace UnvObjectMapping.Output
         }
 
         /// <summary>
+        /// Son run'da güncellenmemiş universe'ler (OM ve TM, UNX ve UNV), salt okuma.
+        /// Her SYSTEM + tür için "ana run" = en çok universe'in yazıldığı EXPORT_DATE.
+        /// Ondan eski tarihli universe'ler listelenir (o run'da okunamamış olanlar).
+        /// Retry ile sonradan yazılanların tarihi daha yeni olduğu için listede çıkmaz.
+        /// Satır: [tablo, SYSTEM, TUR, universe adı, CUID, universe'in tarihi, ana run tarihi]
+        /// </summary>
+        public List<string[]> StaleUniverses()
+        {
+            var rows = new List<string[]>();
+            rows.AddRange(Stale("OM", OmTable, "UNIVERSE_NAME", OmCuid));
+            rows.AddRange(Stale("TM", TmTable, "NAME", TmCuid));
+            return rows;
+        }
+
+        private IEnumerable<string[]> Stale(string label, string table, string nameCol, string cuidCol)
+        {
+            string tur = "CASE WHEN LOWER(" + nameCol + ") LIKE '%.unx' THEN 'UNX' ELSE 'UNV' END";
+            string sql =
+                "WITH u AS (SELECT SYSTEM, " + tur + " AS TUR, " + cuidCol + " AS CUID, MAX(" + nameCol + ") AS NAME, " +
+                "                  MAX(EXPORT_DATE) AS SON " +
+                "           FROM " + table + " GROUP BY SYSTEM, " + tur + ", " + cuidCol + "), " +
+                "     r AS (SELECT SYSTEM, TUR, SON, " +
+                "                  ROW_NUMBER() OVER (PARTITION BY SYSTEM, TUR ORDER BY COUNT(*) DESC, SON DESC) AS RN " +
+                "           FROM u GROUP BY SYSTEM, TUR, SON) " +
+                "SELECT u.SYSTEM, u.TUR, u.NAME, u.CUID, TO_CHAR(u.SON, 'YYYY-MM-DD HH24:MI'), TO_CHAR(r.SON, 'YYYY-MM-DD HH24:MI') " +
+                "FROM u JOIN r ON r.SYSTEM = u.SYSTEM AND r.TUR = u.TUR AND r.RN = 1 " +
+                "WHERE u.SON < r.SON ORDER BY u.SYSTEM, u.TUR, u.NAME";
+
+            var rows = new List<string[]>();
+            using (var conn = new OracleConnection(connectionString))
+            using (var cmd = new OracleCommand(sql, conn))
+            {
+                cmd.CommandTimeout = 600;
+                conn.Open();
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        var row = new string[7];
+                        row[0] = label;
+                        for (int i = 0; i < 6; i++) row[i + 1] = Convert.ToString(r.GetValue(i));
+                        rows.Add(row);
+                    }
+                }
+            }
+            return rows;
+        }
+
+        /// <summary>İki tablodaki toplam satır sayısı: [OM, TM].</summary>
+        public int[] CountAll()
+        {
+            return new[] { Count(OmTable), Count(TmTable) };
+        }
+
+        private int Count(string table)
+        {
+            using (var conn = new OracleConnection(connectionString))
+            using (var cmd = new OracleCommand("SELECT COUNT(*) FROM " + table, conn))
+            {
+                cmd.CommandTimeout = 600;
+                conn.Open();
+                return Convert.ToInt32(cmd.ExecuteScalar());
+            }
+        }
+
+        /// <summary>
+        /// TEK SEFERLİK: iki tablodaki TÜM satırları (UNX ve UNV, tüm SYSTEM'ler) tek transaction'da siler.
+        /// Geri alınamaz; sonrasında Java ve C# run'ları ile yeniden doldurulur.
+        /// </summary>
+        public int[] PurgeAll()
+        {
+            using (var conn = new OracleConnection(connectionString))
+            {
+                conn.Open();
+                using (OracleTransaction tx = conn.BeginTransaction())
+                {
+                    try
+                    {
+                        int om, tm;
+                        using (var cmd = new OracleCommand("DELETE FROM " + OmTable, conn))
+                        {
+                            cmd.CommandTimeout = 3600;
+                            om = cmd.ExecuteNonQuery();
+                        }
+                        using (var cmd = new OracleCommand("DELETE FROM " + TmTable, conn))
+                        {
+                            cmd.CommandTimeout = 3600;
+                            tm = cmd.ExecuteNonQuery();
+                        }
+                        tx.Commit();
+                        return new[] { om, tm };
+                    }
+                    catch
+                    {
+                        tx.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Tek universe'in UNV satırlarını tek transaction'da yeniler.
         /// tables == null ise (tablolar okunamadı) table mapping satırlarına dokunulmaz.
         /// </summary>
