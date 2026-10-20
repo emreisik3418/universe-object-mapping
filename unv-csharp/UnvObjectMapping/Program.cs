@@ -244,9 +244,11 @@ namespace UnvObjectMapping
             Console.WriteLine("Sonrasında Java (UNX) ve C# (UNV) run'larını çalıştırarak tabloları yeniden doldurun.");
             Console.Write("Devam etmek için büyük harflerle SIL yazıp Enter'a basın: ");
             string answer = Console.ReadLine();
-            if (answer == null || answer.Trim() != "SIL")
+            // Türkçe klavyede büyük "i" -> "İ" olur; SIL ve SİL ikisi de kabul
+            string a = answer == null ? "" : answer.Trim().ToUpperInvariant();
+            if (a != "SIL" && a != "SİL")
             {
-                Console.WriteLine("İptal edildi. Hiçbir şey silinmedi.");
+                Console.WriteLine("İptal edildi (yazılan: '" + answer + "'). Hiçbir şey silinmedi.");
                 return 1;
             }
 
