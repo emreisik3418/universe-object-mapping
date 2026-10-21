@@ -75,6 +75,10 @@ public final class DescriptionUpdateApp {
         }
         if (positional.size() != 3) {
             log.error(USAGE);
+            log.error("3 parametre bekleniyordu, " + positional.size() + " geldi. Boşluk içeren değerleri \"tırnak\" içine alın:");
+            for (int i = 0; i < positional.size(); i++) {
+                log.error("  [" + (i + 1) + "] " + positional.get(i));
+            }
             return 2;
         }
         String universeArg = positional.get(1);
