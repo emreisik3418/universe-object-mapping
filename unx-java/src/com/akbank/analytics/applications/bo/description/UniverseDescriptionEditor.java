@@ -51,8 +51,9 @@ public final class UniverseDescriptionEditor implements AutoCloseable {
         return (BusinessLayer) localService.load(blxPath);
     }
 
-    public void save(BusinessLayer businessLayer) {
-        localService.save(businessLayer);
+    /** Business layer'ı aynı .blx dosyasının üzerine kaydeder. */
+    public void save(BusinessLayer businessLayer, String blxPath) {
+        localService.save(businessLayer, blxPath, true);
     }
 
     public void closeQuietly(BusinessLayer businessLayer) {
@@ -66,7 +67,7 @@ public final class UniverseDescriptionEditor implements AutoCloseable {
 
     /** Yerel universe'ü CMS klasörüne yayınlar (aynı adla, üzerine yazar). */
     public void publish(String blxPath, String cmsFolderPath) {
-        cmsService.publishUniverse(blxPath, cmsFolderPath, true);
+        cmsService.publish(blxPath, cmsFolderPath, true);
     }
 
     /** Business layer'daki tüm objeler (dimension, measure, attribute), tam yollarıyla. */

@@ -154,7 +154,7 @@ public final class DescriptionUpdateApp {
 
                 // ---- 5) Uygula + kaydet
                 changed = plan.apply();
-                editor.save(bl);
+                editor.save(bl, blxPath);
                 log.info(changed + " objenin açıklaması değiştirildi ve yerel kopya kaydedildi.");
             } finally {
                 editor.closeQuietly(bl);
