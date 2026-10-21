@@ -15,11 +15,14 @@ import com.sap.sl.sdk.framework.SlContext;
 import com.sap.sl.sdk.framework.cms.CmsSessionService;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -89,6 +92,48 @@ public final class UniverseDescriptionEditor implements AutoCloseable {
                 collect(((BlContainer) item).getChildren(), childPath, out);
             }
         }
+    }
+
+    /**
+     * Business layer'da aynı adla birden fazla kez tanımlı özel özellikleri (custom property, ör. CHECK_INTEGRITY)
+     * tekilleştirir: ilki kalır, tekrarlar silinir. Böyle bir universe SDK'da kaydedilemiyor (SLS 12077).
+     * SDK sürümleri arasında tip adları farklı olabildiği için yansıma (reflection) ile erişilir.
+     *
+     * @return silinen tekrarlar ("AD = DEĞER"); özellik listesine bu SDK'da erişilemiyorsa null
+     */
+    public static List<String> removeDuplicateCustomProperties(Object item, boolean dryRun) throws Exception {
+        List<String> removed = new ArrayList<>();
+        Object result;
+        try {
+            result = call(item, "getCustomProperties");
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+        if (!(result instanceof List)) {
+            return null;
+        }
+        List<?> list = (List<?>) result;
+        Set<String> seen = new HashSet<>();
+        List<Object> duplicates = new ArrayList<>();
+        for (Object p : list) {
+            String name = String.valueOf(call(p, "getName"));
+            if (!seen.add(name)) {
+                duplicates.add(p);
+                removed.add(name + " = " + call(p, "getValue"));
+            }
+        }
+        if (!dryRun) {
+            for (Object d : duplicates) {
+                list.remove(d);
+            }
+        }
+        return removed;
+    }
+
+    private static Object call(Object target, String method) throws Exception {
+        Method m = target.getClass().getMethod(method);
+        m.setAccessible(true);   // gerçekleme sınıfı public olmayabilir
+        return m.invoke(target);
     }
 
     /** Dokunulmamış universe dosyalarının kopyası (geri dönüş için). */

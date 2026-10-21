@@ -147,6 +147,8 @@ public final class DescriptionUpdateApp {
 
                 int toUpdate = plan.count(DescriptionPlan.Status.UPDATE);
                 if (!apply) {
+                    logDuplicates(UniverseDescriptionEditor.removeDuplicateCustomProperties(bl, true),
+                            "Tekrar eden custom property var, --apply'da silinecek (ilki korunur): ", log);
                     log.info("DRY-RUN: universe'e dokunulmadı. " + toUpdate +
                              " obje güncellenecek. Raporu kontrol edip --apply ile çalıştırın.");
                     return 0;
@@ -157,6 +159,9 @@ public final class DescriptionUpdateApp {
                 }
 
                 // ---- 5) Uygula + kaydet
+                // Aynı adla tekrar eden custom property (ör. CHECK_INTEGRITY) varsa SDK kaydetmeyi reddediyor
+                logDuplicates(UniverseDescriptionEditor.removeDuplicateCustomProperties(bl, false),
+                        "Tekrar eden custom property silindi (ilki korundu): ", log);
                 changed = plan.apply();
                 editor.save(bl, blxPath);
                 log.info(changed + " objenin açıklaması değiştirildi ve yerel kopya kaydedildi.");
@@ -207,6 +212,15 @@ public final class DescriptionUpdateApp {
         }
         log.info("Bitti. Sonuç: " + (ok ? "BAŞARILI" : "UYARILI (detaylar yukarıda)"));
         return ok ? 0 : 1;
+    }
+
+    private static void logDuplicates(List<String> dupes, String prefix, RunLog log) {
+        if (dupes == null) {
+            log.warn("Bu SDK sürümünde business layer custom property listesine erişilemedi; " +
+                     "tekrar eden özellik kontrolü yapılamadı.");
+            return;
+        }
+        for (String d : dupes) log.warn(prefix + d);
     }
 
     /** CUID, tam CMS yolu veya "/Universes" ve ".unx" olmadan kısa yol ile arar (harf duyarsız). */
