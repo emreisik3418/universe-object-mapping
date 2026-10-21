@@ -66,7 +66,9 @@ public final class DescriptionSource {
                     checkColumns(rs.getMetaData());
                     List<DescriptionRow> rows = new ArrayList<>();
                     while (rs.next()) {
-                        rows.add(new DescriptionRow(rs.getString(PATH_COLUMN), rs.getString(DESCRIPTION_COLUMN)));
+                        // Kolon ADIYLA okumak (getString("...")) sürücüde karakter seti çevirisi tetikliyor ve
+                        // orai18n.jar olmadan hata veriyor; sırayla okuyoruz (1 = yol, 2 = açıklama).
+                        rows.add(new DescriptionRow(rs.getString(1), rs.getString(2)));
                     }
                     return rows;
                 }
