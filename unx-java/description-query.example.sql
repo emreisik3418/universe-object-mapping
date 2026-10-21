@@ -1,4 +1,5 @@
--- Description update sorgusu (örnek). Kendi tablonuza göre düzenleyin.
+-- Description update sorgusu (ornek). Kendi tablonuza gore duzenleyin.
+-- NOT: Bu dosyada Turkce karakter KULLANMAYIN (yorumlar dahil); orai18n.jar yoksa surucu cevirmez.
 -- ZORUNLU: iki kolon, bu alias'larla:
 --   OBJECT_PATH : universe'teki obje yolu, klasörler '\' veya '/' ile:  'Müşteri\Müşteri No'
 --                 (attribute ise dimension adı da yolda: 'Müşteri\Müşteri No\Segment')

@@ -24,6 +24,8 @@ import java.util.Set;
  *   OBJECT_PATH  : universe içindeki obje yolu, ör. 'Müşteri\Müşteri No' (ayraç / veya \)
  *   DESCRIPTION  : yazılacak açıklama
  * Sondaki ';' ve '/' karakterleri otomatik atılır.
+ * Sorgu dosyasında Türkçe karakter (yorum satırları dahil) olmamalı; orai18n.jar yoksa
+ * sürücü sorgu metnini DB karakter setine çeviremeyebilir. Veri içindeki Türkçe karakterler sorun değil.
  */
 public final class DescriptionSource {
 
@@ -55,7 +57,12 @@ public final class DescriptionSource {
             c.setReadOnly(true);
             try (Statement st = c.createStatement()) {
                 st.setQueryTimeout(600);
-                try (ResultSet rs = st.executeQuery(sql)) {
+                // TO_NCHAR: DB karakter seti (ör. WE8ISO8859P9) JDBC sürücüsünde orai18n.jar olmadan
+                // okunamıyor; ulusal karakter seti (AL16UTF16) ise her zaman okunabiliyor.
+                String wrapped = "SELECT TO_NCHAR(Q." + PATH_COLUMN + ") AS " + PATH_COLUMN +
+                                 ", TO_NCHAR(Q." + DESCRIPTION_COLUMN + ") AS " + DESCRIPTION_COLUMN +
+                                 " FROM (\n" + sql + "\n) Q";
+                try (ResultSet rs = st.executeQuery(wrapped)) {
                     checkColumns(rs.getMetaData());
                     List<DescriptionRow> rows = new ArrayList<>();
                     while (rs.next()) {
