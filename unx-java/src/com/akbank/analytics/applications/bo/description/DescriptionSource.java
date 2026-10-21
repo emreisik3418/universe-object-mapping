@@ -1,0 +1,80 @@
+package com.akbank.analytics.applications.bo.description;
+
+import com.akbank.analytics.applications.bo.model.Credential;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * Açıklamaları Oracle'dan okur (salt okuma).
+ * Sorgu bir .sql dosyasındadır ve şu iki kolonu (alias) döndürmelidir:
+ *   OBJECT_PATH  : universe içindeki obje yolu, ör. 'Müşteri\Müşteri No' (ayraç / veya \)
+ *   DESCRIPTION  : yazılacak açıklama
+ * Sondaki ';' ve '/' karakterleri otomatik atılır.
+ */
+public final class DescriptionSource {
+
+    public static final String PATH_COLUMN = "OBJECT_PATH";
+    public static final String DESCRIPTION_COLUMN = "DESCRIPTION";
+
+    private final String jdbcUrl;
+    private final Credential credential;
+
+    public DescriptionSource(String jdbcUrl, Credential credential) {
+        this.jdbcUrl = jdbcUrl;
+        this.credential = credential;
+    }
+
+    public static String loadSql(Path file) throws IOException {
+        String sql = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        if (sql.startsWith("﻿")) sql = sql.substring(1);
+        sql = sql.trim();
+        while (sql.endsWith(";") || sql.endsWith("/")) {
+            sql = sql.substring(0, sql.length() - 1).trim();
+        }
+        if (sql.isEmpty()) throw new IOException("SQL dosyası boş: " + file.toAbsolutePath());
+        return sql;
+    }
+
+    public List<DescriptionRow> read(String sql) throws SQLException {
+        DriverManager.setLoginTimeout(30);
+        try (Connection c = DriverManager.getConnection(jdbcUrl, credential.getUsername(), credential.getPassword())) {
+            c.setReadOnly(true);
+            try (Statement st = c.createStatement()) {
+                st.setQueryTimeout(600);
+                try (ResultSet rs = st.executeQuery(sql)) {
+                    checkColumns(rs.getMetaData());
+                    List<DescriptionRow> rows = new ArrayList<>();
+                    while (rs.next()) {
+                        rows.add(new DescriptionRow(rs.getString(PATH_COLUMN), rs.getString(DESCRIPTION_COLUMN)));
+                    }
+                    return rows;
+                }
+            }
+        }
+    }
+
+    private static void checkColumns(ResultSetMetaData md) throws SQLException {
+        Set<String> cols = new HashSet<>();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            cols.add(md.getColumnLabel(i).toUpperCase(Locale.ROOT));
+        }
+        if (!cols.contains(PATH_COLUMN) || !cols.contains(DESCRIPTION_COLUMN)) {
+            throw new SQLException("Sorgu " + PATH_COLUMN + " ve " + DESCRIPTION_COLUMN +
+                    " kolonlarını (alias) döndürmeli. Gelen kolonlar: " + cols);
+        }
+    }
+}

@@ -21,8 +21,12 @@ public final class RunLog implements AutoCloseable {
     }
 
     public static RunLog open(Path dir) throws IOException {
+        return open(dir, "run");
+    }
+
+    public static RunLog open(Path dir, String prefix) throws IOException {
         Files.createDirectories(dir);
-        String name = "run_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".log";
+        String name = prefix + "_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".log";
         Path p = dir.resolve(name);
         return new RunLog(new PrintWriter(Files.newBufferedWriter(p, StandardCharsets.UTF_8), true), p);
     }
