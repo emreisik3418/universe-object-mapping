@@ -28,6 +28,8 @@ import java.util.Map;
  *   sorgu.sql: OBJECT_PATH ve DESCRIPTION kolonlarını döndüren SELECT
  *   --env    : credentials.json'da birden fazla ortam varsa hangisi
  *   --apply  : verilmezse DRY-RUN — universe'e HİÇ dokunulmaz, sadece rapor yazılır
+ *   --diag   : teşhis — custom property'leri listeler ve universe'ü DEĞİŞTİRMEDEN yerel bir kopyaya
+ *              kaydetmeyi dener (yayın yok). Kaydetme hatalarının universe'ten mi kaynaklandığını gösterir.
  *
  * Güvenlik:
  *   - Varsayılan dry-run. Her çalıştırmada reports\ altına ne yapılacağını gösteren CSV yazılır.
@@ -68,8 +70,10 @@ public final class DescriptionUpdateApp {
         List<String> positional = new ArrayList<>();
         String envArg = null;
         boolean apply = false;
+        boolean diag = false;
         for (int i = 0; i < args.length; i++) {
             if ("--apply".equalsIgnoreCase(args[i])) apply = true;
+            else if ("--diag".equalsIgnoreCase(args[i])) diag = true;
             else if ("--env".equalsIgnoreCase(args[i]) && i + 1 < args.length) envArg = args[++i];
             else positional.add(args[i]);
         }
@@ -135,6 +139,9 @@ public final class DescriptionUpdateApp {
             int changed;
             try {
                 bl = editor.load(blxPath);
+                if (diag) {
+                    return diagnose(editor, bl, workDir, log);
+                }
                 List<TargetObject> objects = UniverseDescriptionEditor.objects(bl);
                 DescriptionPlan plan = DescriptionPlan.build(objects, rows);
 
@@ -212,6 +219,62 @@ public final class DescriptionUpdateApp {
         }
         log.info("Bitti. Sonuç: " + (ok ? "BAŞARILI" : "UYARILI (detaylar yukarıda)"));
         return ok ? 0 : 1;
+    }
+
+    /** Teşhis: custom property'leri listeler, değişiklik yapmadan yerel kopyaya kaydetmeyi dener. Yayın yok. */
+    private static int diagnose(UniverseDescriptionEditor editor, BusinessLayer bl, Path workDir, RunLog log) {
+        log.info("TEŞHİS modu: universe değiştirilmeyecek ve yayınlanmayacak.");
+        logProperties("Business layer", bl, log);
+        try {
+            logProperties("Kök klasör", bl.getRootFolder(), log);
+        } catch (Exception e) {
+            log.warn("Kök klasör okunamadı: " + RunLog.describe(e));
+        }
+
+        Path copy = workDir.resolve("diag").resolve("kopya.blx");
+        try {
+            java.nio.file.Files.createDirectories(copy.getParent());
+            editor.save(bl, copy.toString());
+            log.info("TEŞHİS: DEĞİŞİKLİKSİZ kaydetme BAŞARILI -> " + copy);
+            log.info("  => Sorun universe'te değil; açıklama değişikliğiyle ilgili. Bu log'u gönderin.");
+            return 0;
+        } catch (Exception e) {
+            log.error("TEŞHİS: DEĞİŞİKLİKSİZ kaydetme de BAŞARISIZ", e);
+            log.info("  => Sorun universe'ün kendisinde (SDK, IDT'de kaydedilmiş hâlini kabul etmiyor). Bu log'u gönderin.");
+            return 1;
+        }
+    }
+
+    private static void logProperties(String label, Object item, RunLog log) {
+        try {
+            java.lang.reflect.Method m = item.getClass().getMethod("getCustomProperties");
+            m.setAccessible(true);
+            Object result = m.invoke(item);
+            if (!(result instanceof List)) {
+                log.info(label + " custom property: (liste değil: " + result + ")");
+                return;
+            }
+            List<?> list = (List<?>) result;
+            log.info(label + " custom property sayısı: " + list.size());
+            for (Object p : list) {
+                log.info("  " + prop(p, "getName") + " = " + prop(p, "getValue"));
+            }
+        } catch (NoSuchMethodException e) {
+            log.info(label + ": getCustomProperties() yok (" + item.getClass().getName() + ")");
+        } catch (Exception e) {
+            log.warn(label + " custom property okunamadı: " + RunLog.describe(e));
+        }
+    }
+
+    private static String prop(Object p, String method) {
+        try {
+            java.lang.reflect.Method m = p.getClass().getMethod(method);
+            m.setAccessible(true);
+            String v = String.valueOf(m.invoke(p));
+            return v.length() > 120 ? v.substring(0, 120) + "..." : v;
+        } catch (Exception e) {
+            return "?";
+        }
     }
 
     private static void logDuplicates(List<String> dupes, String prefix, RunLog log) {
