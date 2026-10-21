@@ -57,10 +57,12 @@ public final class DescriptionSource {
             c.setReadOnly(true);
             try (Statement st = c.createStatement()) {
                 st.setQueryTimeout(600);
-                // TO_NCHAR: DB karakter seti (ör. WE8ISO8859P9) JDBC sürücüsünde orai18n.jar olmadan
-                // okunamıyor; ulusal karakter seti (AL16UTF16) ise her zaman okunabiliyor.
+                // DB karakter seti (ör. WE8ISO8859P9) JDBC sürücüsünde orai18n.jar olmadan okunamıyor;
+                // ulusal karakter seti (AL16UTF16) ise her zaman okunabiliyor.
+                //  - Yol kısa: TO_NCHAR (NVARCHAR2, en fazla 2000 karakter)
+                //  - Açıklama uzun olabilir: TO_NCLOB (sınırsız; NVARCHAR2'ye sığmayınca ORA-12899 veriyordu)
                 String wrapped = "SELECT TO_NCHAR(Q." + PATH_COLUMN + ") AS " + PATH_COLUMN +
-                                 ", TO_NCHAR(Q." + DESCRIPTION_COLUMN + ") AS " + DESCRIPTION_COLUMN +
+                                 ", TO_NCLOB(Q." + DESCRIPTION_COLUMN + ") AS " + DESCRIPTION_COLUMN +
                                  " FROM (\n" + sql + "\n) Q";
                 try (ResultSet rs = st.executeQuery(wrapped)) {
                     checkColumns(rs.getMetaData());
