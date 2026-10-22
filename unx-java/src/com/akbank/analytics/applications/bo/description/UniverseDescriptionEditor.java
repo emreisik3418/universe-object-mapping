@@ -22,7 +22,9 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
@@ -95,39 +97,68 @@ public final class UniverseDescriptionEditor implements AutoCloseable {
     }
 
     /**
-     * Business layer'da aynı adla birden fazla kez tanımlı özel özellikleri (custom property, ör. CHECK_INTEGRITY)
-     * tekilleştirir: ilki kalır, tekrarlar silinir. Böyle bir universe SDK'da kaydedilemiyor (SLS 12077).
-     * SDK sürümleri arasında tip adları farklı olabildiği için yansıma (reflection) ile erişilir.
+     * Business layer'da "ad + değer" çiftlerinden oluşan listelerde (query script parametreleri, custom property'ler vb.)
+     * aynı adla tekrar eden kayıtları tekilleştirir: ilki kalır, tekrarlar silinir.
+     * Ör. IDT'de Query Options'taki CHECK_INTEGRITY parametresi iki kez tanımlıysa SDK universe'ü
+     * kaydetmiyor: "The query script property CHECK_INTEGRITY already exists" (SLS 12077).
      *
-     * @return silinen tekrarlar ("AD = DEĞER"); özellik listesine bu SDK'da erişilemiyorsa null
+     * SDK sürümleri arasında metot/tip adları farklı olabildiği için yansıma (reflection) ile, business layer'ın
+     * parametresiz ve List döndüren tüm get...() metotları taranır; sadece elemanlarında hem getName() hem
+     * getValue() olan listelere dokunulur (iş objeleri vb. etkilenmez). Ad karşılaştırması harf duyarsız.
+     *
+     * @return silinen (dryRun'da silinecek) tekrarlar: "metot: AD = DEĞER"
      */
-    public static List<String> removeDuplicateCustomProperties(Object item, boolean dryRun) throws Exception {
+    public static List<String> removeDuplicateProperties(Object item, boolean dryRun) throws Exception {
         List<String> removed = new ArrayList<>();
-        Object result;
-        try {
-            result = call(item, "getCustomProperties");
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
-        if (!(result instanceof List)) {
-            return null;
-        }
-        List<?> list = (List<?>) result;
-        Set<String> seen = new HashSet<>();
-        List<Object> duplicates = new ArrayList<>();
-        for (Object p : list) {
-            String name = String.valueOf(call(p, "getName"));
-            if (!seen.add(name)) {
-                duplicates.add(p);
-                removed.add(name + " = " + call(p, "getValue"));
+        for (Map.Entry<String, List<?>> e : propertyLists(item).entrySet()) {
+            List<?> list = e.getValue();
+            Set<String> seen = new HashSet<>();
+            List<Object> duplicates = new ArrayList<>();
+            for (Object p : list) {
+                String name = String.valueOf(call(p, "getName"));
+                if (!seen.add(name.toUpperCase(java.util.Locale.ROOT))) {
+                    duplicates.add(p);
+                    removed.add(e.getKey() + ": " + name + " = " + call(p, "getValue"));
+                }
             }
-        }
-        if (!dryRun) {
-            for (Object d : duplicates) {
-                list.remove(d);
+            if (!dryRun) {
+                for (Object d : duplicates) {
+                    list.remove(d);
+                }
             }
         }
         return removed;
+    }
+
+    /** item'ın "ad + değer" listeleri: metot adı -> liste (teşhis ve tekilleştirme için). */
+    public static Map<String, List<?>> propertyLists(Object item) {
+        Map<String, List<?>> out = new TreeMap<>();
+        for (Method m : item.getClass().getMethods()) {
+            if (m.getParameterCount() != 0 || !m.getName().startsWith("get")
+                    || !List.class.isAssignableFrom(m.getReturnType())) {
+                continue;
+            }
+            try {
+                m.setAccessible(true);
+                Object r = m.invoke(item);
+                if (!(r instanceof List) || ((List<?>) r).isEmpty()) continue;
+                Object first = ((List<?>) r).get(0);
+                if (hasGetter(first, "getName") && hasGetter(first, "getValue")) {
+                    out.put(m.getName(), (List<?>) r);
+                }
+            } catch (Exception ignored) {
+                // erişilemeyen metot: atla
+            }
+        }
+        return out;
+    }
+
+    private static boolean hasGetter(Object o, String name) {
+        try {
+            return o != null && o.getClass().getMethod(name).getParameterCount() == 0;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
     }
 
     private static Object call(Object target, String method) throws Exception {

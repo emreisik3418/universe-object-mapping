@@ -154,8 +154,8 @@ public final class DescriptionUpdateApp {
 
                 int toUpdate = plan.count(DescriptionPlan.Status.UPDATE);
                 if (!apply) {
-                    logDuplicates(UniverseDescriptionEditor.removeDuplicateCustomProperties(bl, true),
-                            "Tekrar eden custom property var, --apply'da silinecek (ilki korunur): ", log);
+                    logDuplicates(UniverseDescriptionEditor.removeDuplicateProperties(bl, true),
+                            "Tekrar eden parametre var, --apply'da silinecek (ilki korunur): ", log);
                     log.info("DRY-RUN: universe'e dokunulmadı. " + toUpdate +
                              " obje güncellenecek. Raporu kontrol edip --apply ile çalıştırın.");
                     return 0;
@@ -167,8 +167,8 @@ public final class DescriptionUpdateApp {
 
                 // ---- 5) Uygula + kaydet
                 // Aynı adla tekrar eden custom property (ör. CHECK_INTEGRITY) varsa SDK kaydetmeyi reddediyor
-                logDuplicates(UniverseDescriptionEditor.removeDuplicateCustomProperties(bl, false),
-                        "Tekrar eden custom property silindi (ilki korundu): ", log);
+                logDuplicates(UniverseDescriptionEditor.removeDuplicateProperties(bl, false),
+                        "Tekrar eden parametre silindi (ilki korundu): ", log);
                 changed = plan.apply();
                 editor.save(bl, blxPath);
                 log.info(changed + " objenin açıklaması değiştirildi ve yerel kopya kaydedildi.");
@@ -221,48 +221,52 @@ public final class DescriptionUpdateApp {
         return ok ? 0 : 1;
     }
 
-    /** Teşhis: custom property'leri listeler, değişiklik yapmadan yerel kopyaya kaydetmeyi dener. Yayın yok. */
-    private static int diagnose(UniverseDescriptionEditor editor, BusinessLayer bl, Path workDir, RunLog log) {
-        log.info("TEŞHİS modu: universe değiştirilmeyecek ve yayınlanmayacak.");
-        logProperties("Business layer", bl, log);
-        try {
-            logProperties("Kök klasör", bl.getRootFolder(), log);
-        } catch (Exception e) {
-            log.warn("Kök klasör okunamadı: " + RunLog.describe(e));
+    /**
+     * Teşhis (yayın yok): "ad + değer" listelerini yazar, universe'ü değiştirmeden yerel kopyaya kaydetmeyi dener;
+     * olmazsa tekrar eden parametreleri SADECE bellekte tekilleştirip tekrar dener.
+     */
+    private static int diagnose(UniverseDescriptionEditor editor, BusinessLayer bl, Path workDir, RunLog log)
+            throws Exception {
+        log.info("TEŞHİS modu: CMS'teki universe değiştirilmeyecek ve yayınlanmayacak.");
+        Map<String, List<?>> lists = UniverseDescriptionEditor.propertyLists(bl);
+        if (lists.isEmpty()) log.info("Business layer'da ad+değer listesi bulunamadı.");
+        for (Map.Entry<String, List<?>> e : lists.entrySet()) {
+            log.info("Business layer." + e.getKey() + "(): " + e.getValue().size() + " kayıt");
+            for (Object p : e.getValue()) {
+                log.info("    " + prop(p, "getName") + " = " + prop(p, "getValue"));
+            }
         }
 
-        Path copy = workDir.resolve("diag").resolve("kopya.blx");
-        try {
-            java.nio.file.Files.createDirectories(copy.getParent());
-            editor.save(bl, copy.toString());
-            log.info("TEŞHİS: DEĞİŞİKLİKSİZ kaydetme BAŞARILI -> " + copy);
-            log.info("  => Sorun universe'te değil; açıklama değişikliğiyle ilgili. Bu log'u gönderin.");
+        Path dir = workDir.resolve("diag");
+        java.nio.file.Files.createDirectories(dir);
+        if (trySave(editor, bl, dir.resolve("1_degisikliksiz.blx"), "DEĞİŞİKLİKSİZ", log)) {
+            log.info("  => Universe olduğu gibi kaydedilebiliyor. Bu log'u gönderin.");
             return 0;
-        } catch (Exception e) {
-            log.error("TEŞHİS: DEĞİŞİKLİKSİZ kaydetme de BAŞARISIZ", e);
-            log.info("  => Sorun universe'ün kendisinde (SDK, IDT'de kaydedilmiş hâlini kabul etmiyor). Bu log'u gönderin.");
+        }
+
+        List<String> dupes = UniverseDescriptionEditor.removeDuplicateProperties(bl, false);
+        if (dupes.isEmpty()) {
+            log.info("  => Tekrar eden parametre bulunamadı; otomatik düzeltme yok. Bu log'u gönderin.");
             return 1;
         }
+        for (String d : dupes) log.warn("Bellekte silindi (ilki korundu): " + d);
+        if (trySave(editor, bl, dir.resolve("2_tekillestirilmis.blx"), "TEKİLLEŞTİRME SONRASI", log)) {
+            log.info("  => ÇÖZÜM BU: --apply aynı tekilleştirmeyi yapıp kaydedecek ve yayınlayacak.");
+            return 0;
+        }
+        log.info("  => Tekilleştirme yetmedi. Bu log'u gönderin.");
+        return 1;
     }
 
-    private static void logProperties(String label, Object item, RunLog log) {
+    private static boolean trySave(UniverseDescriptionEditor editor, BusinessLayer bl, Path file,
+                                   String label, RunLog log) {
         try {
-            java.lang.reflect.Method m = item.getClass().getMethod("getCustomProperties");
-            m.setAccessible(true);
-            Object result = m.invoke(item);
-            if (!(result instanceof List)) {
-                log.info(label + " custom property: (liste değil: " + result + ")");
-                return;
-            }
-            List<?> list = (List<?>) result;
-            log.info(label + " custom property sayısı: " + list.size());
-            for (Object p : list) {
-                log.info("  " + prop(p, "getName") + " = " + prop(p, "getValue"));
-            }
-        } catch (NoSuchMethodException e) {
-            log.info(label + ": getCustomProperties() yok (" + item.getClass().getName() + ")");
+            editor.save(bl, file.toString());
+            log.info("TEŞHİS: " + label + " kaydetme BAŞARILI -> " + file);
+            return true;
         } catch (Exception e) {
-            log.warn(label + " custom property okunamadı: " + RunLog.describe(e));
+            log.error("TEŞHİS: " + label + " kaydetme BAŞARISIZ", e);
+            return false;
         }
     }
 
@@ -278,11 +282,6 @@ public final class DescriptionUpdateApp {
     }
 
     private static void logDuplicates(List<String> dupes, String prefix, RunLog log) {
-        if (dupes == null) {
-            log.warn("Bu SDK sürümünde business layer custom property listesine erişilemedi; " +
-                     "tekrar eden özellik kontrolü yapılamadı.");
-            return;
-        }
         for (String d : dupes) log.warn(prefix + d);
     }
 
