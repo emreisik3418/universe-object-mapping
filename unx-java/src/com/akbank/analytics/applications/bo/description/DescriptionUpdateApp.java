@@ -237,6 +237,8 @@ public final class DescriptionUpdateApp {
             }
         }
 
+        dumpApi("BL", bl, 0, new java.util.IdentityHashMap<>(), log);
+
         Path dir = workDir.resolve("diag");
         java.nio.file.Files.createDirectories(dir);
         if (trySave(editor, bl, dir.resolve("1_degisikliksiz.blx"), "DEĞİŞİKLİKSİZ", log)) {
@@ -256,6 +258,73 @@ public final class DescriptionUpdateApp {
         }
         log.info("  => Tekilleştirme yetmedi. Bu log'u gönderin.");
         return 1;
+    }
+
+    private static final java.util.regex.Pattern INTERESTING =
+            java.util.regex.Pattern.compile("(?i).*(param|script|query|option|propert|setting|integrity).*");
+
+    /**
+     * Teşhis: nesnenin parametresiz public get/is metotlarını ve dönüş değerlerini yazar.
+     * Adında param/script/query/option/property geçen nesnelere 2 seviyeye kadar iner.
+     * Liste/Map'lerin boyutunu ve ilk elemanlarını gösterir. Hiçbir şeyi değiştirmez.
+     */
+    private static void dumpApi(String label, Object o, int depth, java.util.Map<Object, Boolean> seen, RunLog log) {
+        if (o == null || seen.put(o, Boolean.TRUE) != null) return;
+        String indent = new String(new char[depth * 4]).replace('\0', ' ');
+        StringBuilder ifaces = new StringBuilder();
+        for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
+            for (Class<?> i : c.getInterfaces()) ifaces.append(i.getSimpleName()).append(' ');
+        }
+        log.info(indent + "API " + label + " : " + o.getClass().getName() + "  [" + ifaces.toString().trim() + "]");
+        java.lang.reflect.Method[] methods = o.getClass().getMethods();
+        java.util.Arrays.sort(methods, java.util.Comparator.comparing(java.lang.reflect.Method::getName));
+        for (java.lang.reflect.Method m : methods) {
+            String n = m.getName();
+            if (m.getParameterCount() != 0 || m.getDeclaringClass() == Object.class
+                    || !(n.startsWith("get") || n.startsWith("is"))) continue;
+            Object v;
+            try {
+                m.setAccessible(true);
+                v = m.invoke(o);
+            } catch (Throwable t) {
+                log.info(indent + "  " + n + "() -> HATA " + t.getClass().getSimpleName());
+                continue;
+            }
+            log.info(indent + "  " + n + "() : " + m.getReturnType().getSimpleName() + " = " + summary(v));
+            boolean interesting = INTERESTING.matcher(n).matches();
+            if (depth < 2 && interesting && v != null) {
+                if (v instanceof java.util.Collection) {
+                    int k = 0;
+                    for (Object e : (java.util.Collection<?>) v) {
+                        if (k++ >= 5) break;
+                        dumpApi(n + "[" + (k - 1) + "]", e, depth + 1, seen, log);
+                    }
+                } else if (v instanceof java.util.Map) {
+                    for (java.util.Map.Entry<?, ?> e : ((java.util.Map<?, ?>) v).entrySet()) {
+                        log.info(indent + "      " + e.getKey() + " = " + summary(e.getValue()));
+                    }
+                } else if (!isSimple(v)) {
+                    dumpApi(n, v, depth + 1, seen, log);
+                }
+            }
+        }
+    }
+
+    private static boolean isSimple(Object v) {
+        return v instanceof CharSequence || v instanceof Number || v instanceof Boolean
+                || v instanceof Enum || v.getClass().isPrimitive();
+    }
+
+    private static String summary(Object v) {
+        if (v == null) return "null";
+        if (v instanceof java.util.Collection) {
+            java.util.Collection<?> c = (java.util.Collection<?>) v;
+            return c.getClass().getSimpleName() + "(" + c.size() + ")" +
+                   (c.isEmpty() ? "" : " ilk eleman: " + c.iterator().next().getClass().getName());
+        }
+        if (v instanceof java.util.Map) return "Map(" + ((java.util.Map<?, ?>) v).size() + ")";
+        String s = String.valueOf(v).replace('\n', ' ');
+        return s.length() > 100 ? s.substring(0, 100) + "..." : s;
     }
 
     private static boolean trySave(UniverseDescriptionEditor editor, BusinessLayer bl, Path file,
