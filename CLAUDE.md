@@ -49,7 +49,9 @@ Yeni bir oturuma başlarken önce bunu oku. Kullanıcıyla Türkçe konuş.
   (`publishUniverse` değil).
 - Bilinen tuzak: **SLS 12077** "The query script property CHECK_INTEGRITY already exists" → universe değişikliksiz bile
   SDK'da kaydedilemiyor. UNV'den dönüştürülmüş universe'lerde BL → Properties → Parameters (Query Script Parameters)
-  listesinde standart dışı `CHECK_INTEGRITY=false` vardı; IDT'den silip yayınlamak deneniyor (sonuç: bkz. git log / kullanıcı).
+  listesinde standart dışı `CHECK_INTEGRITY=false` vardı. **Çözüm (doğrulandı, 2026-10-23):** IDT'de universe'ü retrieve et →
+  BL kökü → Properties → **Parameters...** → `CHECK_INTEGRITY` satırını **Delete** → kaydet → aynı klasöre Publish.
+  SDK'da bu parametre listesi ad+değer listesi olarak erişilemiyor (kodla tekilleştirme işe yaramadı), IDT'den silinmeli.
   Teşhis için `DescriptionUpdateApp --diag` (değişikliksiz yerel kaydetme + API dökümü).
 
 ## Oracle (Java, ojdbc thin)
