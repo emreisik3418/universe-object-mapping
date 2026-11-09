@@ -92,6 +92,15 @@ public class UniverseReadCheck {
             for (int k = 0; k < Math.min(30, aliases.size()); k++) {
                 System.out.println("       A: " + aliases.get(k));
             }
+            // Tüm tablolar dosyaya (konsolda hepsi görünmüyor)
+            java.nio.file.Path file = Paths.get(System.getProperty("user.dir"), "logs",
+                    "read_tables_" + new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date()) + ".txt");
+            java.nio.file.Files.createDirectories(file.getParent());
+            List<String> lines = new java.util.ArrayList<>();
+            lines.add(target.toString());
+            for (com.akbank.analytics.applications.bo.model.UniverseTable t : content.getTables()) lines.add(t.toString());
+            java.nio.file.Files.write(file, lines, java.nio.charset.StandardCharsets.UTF_8);
+            System.out.println("[OK]   Tüm tablolar: " + file);
         }
         System.out.println("[OK]   Kapatıldı ve logoff yapıldı.");
     }

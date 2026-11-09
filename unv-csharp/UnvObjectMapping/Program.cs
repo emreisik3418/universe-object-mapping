@@ -148,6 +148,21 @@ namespace UnvObjectMapping
                 foreach (var t in content.Tables.Take(15))
                     Console.WriteLine("       T: " + t);
 
+                // Alias'lar ayrıca: TABLE_NAME = "Alias.<ad>", DERIVED_SCRIPT = asıl tablo
+                var aliases = content.Tables.Where(t => t.Name != null &&
+                    t.Name.StartsWith(UniverseTable.AliasPrefix, StringComparison.Ordinal)).ToList();
+                Console.WriteLine("[OK]   Alias sayısı: " + aliases.Count);
+                foreach (var t in aliases.Take(30))
+                    Console.WriteLine("       A: " + t);
+
+                // Tüm tablolar dosyaya (konsolda hepsi görünmüyor)
+                string dir = System.IO.Path.Combine(Environment.CurrentDirectory, "logs");
+                System.IO.Directory.CreateDirectory(dir);
+                string file = System.IO.Path.Combine(dir, "read_tables_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt");
+                System.IO.File.WriteAllLines(file, new[] { target.ToString() }
+                    .Concat(content.Tables.Select(t => t.ToString())), new System.Text.UTF8Encoding(true));
+                Console.WriteLine("[OK]   Tüm tablolar: " + file);
+
                 var byQ = objects.GroupBy(o => o.Qualification).OrderBy(g => g.Key)
                                  .Select(g => "Q" + g.Key + "=" + g.Count());
                 Console.WriteLine("       Qualification dağılımı: " + string.Join(", ", byQ));
