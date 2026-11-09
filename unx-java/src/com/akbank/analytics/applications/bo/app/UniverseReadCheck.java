@@ -68,6 +68,15 @@ public class UniverseReadCheck {
             for (int k = 0; k < Math.min(15, content.getTables().size()); k++) {
                 System.out.println("       T: " + content.getTables().get(k));
             }
+            // Alias'lar ayrıca: TABLE_NAME = "Alias.<ad>", DERIVED_SCRIPT = asıl tablo
+            java.util.List<com.akbank.analytics.applications.bo.model.UniverseTable> aliases = new java.util.ArrayList<>();
+            for (com.akbank.analytics.applications.bo.model.UniverseTable t : content.getTables()) {
+                if (t.getName().startsWith(com.akbank.analytics.applications.bo.model.UniverseTable.ALIAS_PREFIX)) aliases.add(t);
+            }
+            System.out.println("[OK]   Alias sayısı: " + aliases.size());
+            for (int k = 0; k < Math.min(30, aliases.size()); k++) {
+                System.out.println("       A: " + aliases.get(k));
+            }
         }
         System.out.println("[OK]   Kapatıldı ve logoff yapıldı.");
     }
