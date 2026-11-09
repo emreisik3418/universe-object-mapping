@@ -20,32 +20,47 @@ import java.util.TreeMap;
 public class UniverseReadCheck {
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1) {
-            System.out.println("Kullanım: UniverseReadCheck <credentials.json> [universe adı içinde geçen metin]");
+        // Parametreler: <credentials.json> ["universe adı veya içinde geçen metin"] [--env HOST:6400]
+        List<String> pos = new java.util.ArrayList<>();
+        String envArg = null;
+        for (int i = 0; i < args.length; i++) {
+            if ("--env".equalsIgnoreCase(args[i]) && i + 1 < args.length) envArg = args[++i];
+            else pos.add(args[i]);
+        }
+        if (pos.isEmpty()) {
+            System.out.println("Kullanım: UniverseReadCheck <credentials.json> [\"universe adı\"] [--env HOST:6400]");
             return;
         }
-        String filter = args.length > 1 ? args[1].toLowerCase() : null;
+        String filter = pos.size() > 1 ? pos.get(1) : null;
 
-        AppConfig config = AppConfig.load(Paths.get(args[0]));
+        AppConfig config = AppConfig.load(Paths.get(pos.get(0)));
         SboxCredentialProvider sbox = new SboxCredentialProvider(
                 config.getSboxEndpoint(), config.getSboxUsername(), config.getSboxPassword());
 
         BoEnvironment env = config.getEnvironments().get(0);
+        if (envArg != null) {
+            env = null;
+            for (BoEnvironment e : config.getEnvironments()) {
+                if (e.getCms().equalsIgnoreCase(envArg.trim())) env = e;
+            }
+            if (env == null) {
+                System.out.println("[HATA] --env " + envArg + " credentials.json'da yok.");
+                return;
+            }
+        }
+        if (pos.size() > 2) {
+            System.out.println("[UYARI] Fazladan parametre var (boşluklu adı \"tırnak\" içine alın): " + pos.subList(2, pos.size()));
+        }
         Path workDir = Paths.get(System.getProperty("user.dir"), "retrieve");
         System.out.println("=== " + env.getCms() + " ===");
 
         try (BoSession session = BoSession.logon(env.getCms(), sbox.get(env.getSbox()), "secEnterprise");
              UniverseReader reader = new UniverseReader(session, workDir)) {
 
-            UniverseInfo target = null;
-            for (UniverseInfo u : UniverseCatalog.listUnx(session.getInfoStore())) {
-                if (filter == null || u.getName().toLowerCase().contains(filter)) {
-                    target = u;
-                    break;
-                }
-            }
+            List<UniverseInfo> all = UniverseCatalog.listUnx(session.getInfoStore());
+            System.out.println("UNX sayısı: " + all.size() + "   Aranan: " + (filter == null ? "(ilk universe)" : "[" + filter + "]"));
+            UniverseInfo target = pick(all, filter);
             if (target == null) {
-                System.out.println("[HATA] Eşleşen universe bulunamadı.");
                 return;
             }
 
@@ -79,5 +94,58 @@ public class UniverseReadCheck {
             }
         }
         System.out.println("[OK]   Kapatıldı ve logoff yapıldı.");
+    }
+
+    /**
+     * Ad eşleştirme: önce tam ad, sonra "içinde geçen". Birden fazla aday varsa listeler.
+     * Türkçe karakterler, büyük/küçük harf, tire çeşitleri, fazla boşluk ve ".unx" fark etmez.
+     */
+    static UniverseInfo pick(List<UniverseInfo> all, String filter) {
+        if (filter == null) return all.isEmpty() ? null : all.get(0);
+        String f = fold(filter);
+        List<UniverseInfo> contains = new java.util.ArrayList<>();
+        for (UniverseInfo u : all) {
+            String n = fold(u.getName());
+            if (n.equals(f)) {
+                System.out.println("[OK]   Tam eşleşme.");
+                return u;
+            }
+            if (n.contains(f)) contains.add(u);
+        }
+        if (contains.size() == 1) return contains.get(0);
+        if (contains.size() > 1) {
+            System.out.println("[UYARI] " + contains.size() + " universe eşleşti, ilki okunacak. Tam adı yazarak seçin:");
+            for (int i = 0; i < Math.min(20, contains.size()); i++) System.out.println("         " + contains.get(i).getName());
+            return contains.get(0);
+        }
+        System.out.println("[HATA] Eşleşen universe bulunamadı. Bu ortamda ilk kelimeyi içerenler:");
+        String first = f.split(" ")[0];
+        int n = 0;
+        for (UniverseInfo u : all) {
+            if (fold(u.getName()).contains(first) && n++ < 20) System.out.println("         " + u.getName());
+        }
+        if (n == 0) System.out.println("         (yok — universe başka bir ortamda olabilir, --env ile ortam seçin)");
+        return null;
+    }
+
+    /** Karşılaştırma anahtarı: küçük harf, Türkçe karakterler ASCII, tireler '-', tek boşluk, ".unx" yok. */
+    static String fold(String s) {
+        String t = s.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.endsWith(".unx")) t = t.substring(0, t.length() - 4);
+        StringBuilder sb = new StringBuilder(t.length());
+        for (char c : t.toCharArray()) {
+            switch (c) {
+                case '\u0131': case '\u0130': sb.append('i'); break;   // ı İ
+                case '\u00f6': sb.append('o'); break;                  // ö
+                case '\u00fc': sb.append('u'); break;                  // ü
+                case '\u015f': sb.append('s'); break;                  // ş
+                case '\u011f': sb.append('g'); break;                  // ğ
+                case '\u00e7': sb.append('c'); break;                  // ç
+                case '\u2013': case '\u2014': case '\u2212': sb.append('-'); break;  // – — −
+                case '\u0307': break;                                 // "İ".toLowerCase() artığı
+                default: sb.append(c);
+            }
+        }
+        return sb.toString().replaceAll("\\s+", " ");
     }
 }
