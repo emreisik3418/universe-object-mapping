@@ -43,6 +43,10 @@ Yeni bir oturuma başlarken önce bunu oku. Kullanıcıyla Türkçe konuş.
 - Data foundation: `((RelationalBusinessLayer) bl).getDataFoundationPath()` → `load`. Tablo tam adı:
   `dfService.getTableFullName(t)` + `splitTableFullName` → `parts[1] + "." + parts[2]` = ŞEMA.TABLO.
   `DerivedTable.getExpression()`, `AliasTable.getAliasedTable()` (zincir için derinlik sınırı).
+- TM tablosu satır kuralı (Java ve C# aynı, yeni kolon açılmadı — mevcut kolonlar kullanılıyor):
+  fiziksel `TABLE_NAME=ŞEMA.TABLO`; derived `TABLE_NAME=Derived.<ad>`, `DERIVED_SCRIPT=SQL`;
+  alias `TABLE_NAME=Alias.<alias adı>`, `DERIVED_SCRIPT=işaret ettiği asıl tablo` (asıl tablo ayrıca kendi satırıyla da yazılır).
+  C# (UNV) tarafında alias: Designer `t.IsAlias`, `t.OriginalTable`.
 - Business layer gezinme: `bl.getRootFolder().getChildren()`; `BusinessObject` (Dimension/Measure/Attribute) hem obje
   hem `BlContainer` olabilir (altında attribute olan dimension). Yol ayracı `\`.
 - Kaydetme: `localService.save(resource, blxPath, true)` (3 parametre!). Yayın: `cmsService.publish(blxPath, cmsFolder, true)`

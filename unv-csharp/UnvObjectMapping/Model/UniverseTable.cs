@@ -2,19 +2,27 @@ using System;
 
 namespace UnvObjectMapping.Model
 {
-    /// <summary>Universe'ün kullandığı tablo (fiziksel, alias çözülmüş veya derived).</summary>
+    /// <summary>
+    /// Universe'ün kullandığı tablo. TM tablosuna şöyle yazılır:
+    ///   fiziksel : TABLE_NAME = ŞEMA.TABLO          DERIVED_SCRIPT = boş
+    ///   derived  : TABLE_NAME = Derived.&lt;ad&gt;        DERIVED_SCRIPT = SQL
+    ///   alias    : TABLE_NAME = Alias.&lt;alias adı&gt;   DERIVED_SCRIPT = işaret ettiği asıl tablo
+    ///              (asıl tablo da ayrıca kendi satırıyla yazılır)
+    /// </summary>
     public sealed class UniverseTable : IEquatable<UniverseTable>
     {
+        public const string AliasPrefix = "Alias.";
+
         public UniverseTable(string name, string derivedScript)
         {
             Name = name;
             DerivedScript = derivedScript;
         }
 
-        /// <summary>ŞEMA.TABLO veya Derived.&lt;ad&gt;</summary>
+        /// <summary>ŞEMA.TABLO, Derived.&lt;ad&gt; veya Alias.&lt;ad&gt;</summary>
         public string Name { get; }
 
-        /// <summary>Sadece derived table için SQL.</summary>
+        /// <summary>Derived: SQL; alias: işaret ettiği asıl tablo adı; fiziksel: null.</summary>
         public string DerivedScript { get; }
 
         public bool Equals(UniverseTable other) =>
@@ -25,6 +33,9 @@ namespace UnvObjectMapping.Model
         public override int GetHashCode() =>
             ((Name ?? "").GetHashCode() * 397) ^ (DerivedScript ?? "").GetHashCode();
 
-        public override string ToString() => DerivedScript == null ? Name : Name + " [derived]";
+        public override string ToString() =>
+            DerivedScript == null ? Name
+            : Name.StartsWith(AliasPrefix, StringComparison.Ordinal) ? Name + " -> " + DerivedScript
+            : Name + " [derived]";
     }
 }

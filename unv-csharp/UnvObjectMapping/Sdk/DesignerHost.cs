@@ -94,6 +94,15 @@ namespace UnvObjectMapping.Sdk
                         {
                             UniverseTable ut = ToUniverseTable(t, 0);
                             if (ut != null && unique.Add(ut)) tables.Add(ut);
+
+                            // Alias: asıl tablo satırına ek olarak alias'ın kendisi de yazılır
+                            // TABLE_NAME = "Alias.<alias adı>", DERIVED_SCRIPT = işaret ettiği asıl tablo
+                            dynamic table = t;
+                            if (ut != null && TryBool(() => table.IsAlias))
+                            {
+                                var alias = new UniverseTable(UniverseTable.AliasPrefix + Convert.ToString(table.Name), ut.Name);
+                                if (unique.Add(alias)) tables.Add(alias);
+                            }
                             Release((object)t);
                         }
                         Release((object)unvTables);
@@ -119,6 +128,7 @@ namespace UnvObjectMapping.Sdk
 
         /// <summary>
         /// Java/UNX ile aynı kurallar: derived -> "Derived.&lt;ad&gt;" + SQL, alias -> asıl tablo, fiziksel -> adı.
+        /// (Alias'ın kendi satırı "Alias.&lt;ad&gt;" çağıran yerde ayrıca eklenir.)
         /// </summary>
         private static UniverseTable ToUniverseTable(dynamic t, int depth)
         {

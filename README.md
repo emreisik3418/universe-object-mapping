@@ -64,3 +64,13 @@ Project → Properties → Debug → *Command line arguments*:
 ## Tablo kuralı (iki uygulama birlikte)
 - Java sadece `UNIVERSE_NAME LIKE '%.unx'` satırlarını, C# sadece diğerlerini siler/yeniler.
 - `SYSTEM` kolonu = `credentials.json`'daki `cms` değeri (`SUNUCU:6400`).
+
+## Table mapping satır kuralı (UNX ve UNV)
+| Tablo türü | TABLE_NAME | DERIVED_SCRIPT |
+|---|---|---|
+| Fiziksel | `ŞEMA.TABLO` | boş |
+| Derived | `Derived.<ad>` | SQL |
+| Alias | `Alias.<alias adı>` | işaret ettiği asıl tablo (`ŞEMA.TABLO` / `Derived.<ad>`) |
+
+Alias'ın işaret ettiği asıl tablo ayrıca kendi satırıyla da yazılır (bir universe içinde tekil).
+Sadece alias satırları: `WHERE TABLE_NAME LIKE 'Alias.%'`; fiziksel tablolar: `WHERE TABLE_NAME NOT LIKE 'Alias.%' AND TABLE_NAME NOT LIKE 'Derived.%'`.

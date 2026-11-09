@@ -76,7 +76,13 @@ public final class UniverseReader implements AutoCloseable {
                     dataFoundation = (DataFoundation) localService.load(dfxPath);
                     Set<UniverseTable> unique = new LinkedHashSet<>();
                     for (Table t : dataFoundation.getTables()) {
-                        unique.add(toUniverseTable(t, 0));
+                        UniverseTable target = toUniverseTable(t, 0);
+                        unique.add(target);
+                        // Alias: asıl tablo satırına ek olarak alias'ın kendisi de yazılır
+                        // TABLE_NAME = "Alias.<alias adı>", DERIVED_SCRIPT = işaret ettiği asıl tablo
+                        if (t instanceof AliasTable) {
+                            unique.add(new UniverseTable(UniverseTable.ALIAS_PREFIX + t.getName(), target.getName()));
+                        }
                     }
                     tables.addAll(unique);
                 } catch (Exception e) {
@@ -97,11 +103,14 @@ public final class UniverseReader implements AutoCloseable {
         }
     }
 
-    /** Eski uygulamayla aynı kurallar: derived -> "Derived.<ad>" + SQL, alias -> asıl tablo, fiziksel -> ŞEMA.TABLO */
+    /**
+     * Eski uygulamayla aynı kurallar: derived -> "Derived.<ad>" + SQL, alias -> asıl tablo, fiziksel -> ŞEMA.TABLO.
+     * (Alias'ın kendi satırı "Alias.<ad>" çağıran yerde ayrıca eklenir.)
+     */
     private UniverseTable toUniverseTable(Table table, int depth) {
         if (table instanceof DerivedTable) {
             DerivedTable d = (DerivedTable) table;
-            return new UniverseTable("Derived." + d.getName(), clean(d.getExpression()));
+            return new UniverseTable(UniverseTable.DERIVED_PREFIX + d.getName(), clean(d.getExpression()));
         }
         if (table instanceof AliasTable && depth < 20) {     // alias zincirinde sonsuz döngüye girmesin
             Table aliased = ((AliasTable) table).getAliasedTable();
