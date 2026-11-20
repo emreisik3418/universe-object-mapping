@@ -32,6 +32,17 @@ Yeni bir oturuma başlarken önce bunu oku. Kullanıcıyla Türkçe konuş.
 - Toplu çalıştırma: `unx-java\run_unx.bat`, `run_description.bat` (sapjvm java.exe + aynı VM options + `lib\*`).
 - `main` sonunda `System.exit(kod)` çağır (BO SDK thread'leri JVM'i açık tutar). Çıkış kodu: 0 ok, 1 kısmi, 2 hata.
 
+## Paketleme ve zamanlanmış çalışma (doğrulandı, 2026-11-20)
+- Çalışma klasörü `C:\batchs\BusinessObjects\UNIVERSEOBJECTMAPPING\`: `config\credentials.json`, `lib\`, `unv\`, `run_all.bat`, `run_scheduled.bat`.
+- IntelliJ artifact `bo-dist` (tip **Other**, output = `...\lib`): kökte `universe-object-mapping.jar` **arşivi** (içinde
+  module compile output — compile output'u köke koyma, yoksa `lib\com`, `lib\org` açılır ve "Could not find main class"),
+  `axis` (SOAP_AXIS), `oracle` (ORACLE_JDBC), `json` (JSON) klasörleri. BO_SDK eklenmez (bat `sl_sdk.jar`'ı kurulumdan alır).
+  Güncelleme: Build → Build Artifacts → bo-dist → Rebuild.
+- C#: Release | x86 → Rebuild → `bin\x86\Release\*` → `...\unv\` (xcopy). CrystalDecisions GAC'tan gelir, kopyalanmaz.
+- `run_scheduled.bat`: UNX → UNV → UNV kodu ≠ 0 ise 10 dk sonra `retry` → 30 günden eski loglar silinir;
+  tüm çıktı `logs\scheduled_*.log`. Görev Zamanlayıcı: "yalnızca oturum açıkken" (Designer COM etkileşimli oturum ister),
+  "zaten çalışıyorsa yeni örnek başlatma", 8 saat sınırı. Bat dosyaları ASCII + CRLF (Türkçe karakter cmd'de bozuluyor).
+
 ## SL SDK kalıpları (doğrulanmış)
 - Oturum: `CrystalEnterprise.getSessionMgr().logon(user, pass, "HOST:6400", "secEnterprise")` → try-with-resources, `logoff()` garanti.
 - SL bağlamı: `SlContext.create()`; `context.getService(CmsSessionService.class).setSession(enterpriseSession)`.
