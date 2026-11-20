@@ -1,12 +1,13 @@
 @echo off
 rem ===========================================================================
-rem  ZAMANLANMIS CALISTIRMA (Windows Gorev Zamanlayici icin)
+rem  ZAMANLANMIS CALISTIRMA (app launcher / Gorev Zamanlayici icin)
 rem  1) UNX (Java)  object + table mapping
 rem  2) UNV (C#)    object + table mapping
 rem  3) UNV'de hata alan universe varsa: retry (1 kez)
 rem  4) 30 gunden eski loglari siler
 rem
-rem  Tum cikti: %APP%\logs\scheduled_YYYYMMDD_HHMMSS.log
+rem  Tum cikti: %APP%\logs\scheduled_YYYYMMDD_HHMMSS.log (bitince ekrana da basilir)
+rem  Soru sormaz, pause yok; launcher cikis kodunu okuyabilir.
 rem  Cikis kodu: 0 hepsi basarili, 1 kismi hata, 2 en az biri hic baslayamadi
 rem ===========================================================================
 setlocal
@@ -26,8 +27,11 @@ if "%~1"=="--inner" goto :main
 if not exist "%APP%\logs" mkdir "%APP%\logs"
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set TS=%%i
 set LOG=%APP%\logs\scheduled_%TS%.log
+echo [%date% %time%] Basladi. Log: %LOG%
 call "%~f0" --inner >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
+rem Launcher / konsol ciktiyi da gorsun diye log tamamini ekrana bas
+type "%LOG%"
 endlocal & exit /b %RC%
 
 :main
